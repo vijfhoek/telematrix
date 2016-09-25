@@ -6,6 +6,8 @@ import asyncio
 import logging
 import mimetypes
 import time
+import html
+import datetime
 from urllib.parse import unquote, quote, urlparse, parse_qs
 from aiohttp import web, ClientSession, MultipartWriter
 from pprint import pprint
@@ -231,11 +233,43 @@ async def aiotg_message(chat, match):
         print('Unknown telegram chat {}'.format(chat))
         return
 
+
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}:{}'.format(chat.message['message_id'], chat.id))
-    message = match.group(0)
 
-    j = await send_matrix_message(room_id, user_id, txn_id, body=message, msgtype='m.text')
+    message = match.group(0)
+    if 'forward_from' in chat.message:
+        fw_from = chat.message['forward_from']
+        if 'last_name' in fw_from:
+            msg_from = '{} {} (Telegram)'.format(fw_from['first_name'], fw_from['last_name'])
+        else:
+            msg_from = '{} (Telegram)'.format(fw_from['first_name'])
+        date = datetime.datetime.fromtimestamp(fw_from['date'])
+
+        quoted_msg = '\n'.join(['>{}'.format(x) for x in message.split('\n')])
+        quoted_msg = 'Forwarded from {}, said at {}:\n{}'.format(msg_from, date, quoted_msg)
+
+        quoted_html = '<blockquote>{}</blockquote>'.format(html.escape(message).replace('\n', '<br />'))
+        quoted_html = '<i>Forwarded from {}, said at {}:</i>\n{}'.format(html.escape(msg_from), html.escape(str(date)), quoted_html)
+        j = await send_matrix_message(room_id, user_id, txn_id, body=quoted_msg, formatted_body=quoted_html, format='org.matrix.custom.html', msgtype='m.text')
+    elif 'reply_to_message' in chat.message:
+        re_msg = chat.message['reply_to_message']
+        if 'last_name' in re_msg['from']:
+            msg_from = '{} {} (Telegram)'.format(re_msg['from']['first_name'], re_msg['from']['last_name'])
+        else:
+            msg_from = '{} (Telegram)'.format(re_msg['from']['first_name'])
+        date = datetime.datetime.fromtimestamp(re_msg['date'])
+
+        quoted_msg = '\n'.join(['>{}'.format(x) for x in re_msg['text'].split('\n')])
+        quoted_msg = 'Reply to {}, said at {}:\n{}\n\n{}'.format(msg_from, date, quoted_msg, message)
+
+        quoted_html = '<blockquote>{}</blockquote>'.format(html.escape(re_msg['text']).replace('\n', '<br />'))
+        quoted_html = '<i>Reply to {}, said at {}:</i><br />{}<p>{}</p>'.format(html.escape(msg_from), html.escape(str(date)), quoted_html, html.escape(message).replace('\n', '<br />'))
+
+        j = await send_matrix_message(room_id, user_id, txn_id, body=quoted_msg, formatted_body=quoted_html, format='org.matrix.custom.html', msgtype='m.text')
+    else:
+        j = await send_matrix_message(room_id, user_id, txn_id, body=message, msgtype='m.text')
+
     if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
         await asyncio.sleep(1)
         await register_join_matrix(chat, room_id, user_id)
