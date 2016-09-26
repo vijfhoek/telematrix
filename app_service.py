@@ -8,6 +8,7 @@ import html
 import json
 import logging
 import mimetypes
+import sys
 from datetime import datetime
 from time import time
 from urllib.parse import unquote, quote, urlparse, parse_qs
@@ -117,11 +118,15 @@ async def shorten_url(url):
     """
     headers = {'Content-Type': 'application/json'}
     async with SHORTEN_SESS.post(GOO_GL_URL, params={'key': GOOGLE_TOKEN},
-                                 data={'longUrl': url}, headers=headers) \
+                                 data=json.dumps({'longUrl': url}), 
+                                 headers=headers) \
             as response:
-        obj = response.json()
+        obj = await response.json()
 
-    return obj['id'] if 'id' in obj else url
+    if 'id' in obj:
+        return obj['id']
+    else:
+        return url
 
 
 async def matrix_transaction(request):
