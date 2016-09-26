@@ -175,13 +175,11 @@ async def _matrix_request(method_fun, category, path, user_id, data=None,
                           content_type=None):
     # pylint: disable=too-many-arguments
     # Due to this being a helper function, the argument count acceptable
-    buffer = None
     if data is not None:
         if isinstance(data, dict):
-            buffer = json.dumps(data)
+            data = json.dumps(data)
             content_type = 'application/json; charset=utf-8'
         elif content_type is None:
-            buffer = data
             content_type = 'application/octet-stream'
 
     params = {'access_token': AS_TOKEN}
@@ -190,7 +188,7 @@ async def _matrix_request(method_fun, category, path, user_id, data=None,
 
     async with method_fun('{}_matrix/{}/r0/{}'
                           .format(MATRIX_HOST, quote(category), quote(path)),
-                          params=params, data=buffer,
+                          params=params, data=data,
                           headers={'Content-Type': content_type}) as response:
         if response.headers['Content-Type'].split(';')[0] \
                 == 'application/json':
