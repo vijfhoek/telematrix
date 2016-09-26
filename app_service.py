@@ -160,7 +160,7 @@ async def matrix_transaction(request):
                     url_str = MATRIX_HOST_EXT + \
                               '_matrix/media/r0/download/{}{}' \
                               .format(url.netloc, quote(url.path))
-                    url_str = shorten_url(url_str)
+                    url_str = await shorten_url(url_str)
 
                     caption = '<{}> {} ({})'.format(username, content['body'],
                                                     url_str)
