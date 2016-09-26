@@ -136,7 +136,6 @@ async def matrix_transaction(request):
     :return: The response to send.
     """
     body = await request.json()
-
     events = body['events']
     for event in events:
         if event['room_id'] not in MATRIX_ROOMS:
@@ -160,7 +159,7 @@ async def matrix_transaction(request):
                 await group.send_text(msg, parse_mode=mode)
             elif content['msgtype'] == 'm.image':
                 url = urlparse(content['url'])
-                download_matrix_file(url, content['body'])
+                await download_matrix_file(url, content['body'])
                 with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
                     url_str = MATRIX_HOST_EXT + \
                               '_matrix/media/r0/download/{}{}' \
@@ -171,6 +170,7 @@ async def matrix_transaction(request):
                                                     url_str)
                     await group.send_photo(img_file, caption=caption)
             else:
+                print('Unsupported message type {}'.format(content['msgtype'])
                 print(json.dumps(content, indent=4))
 
     return create_response(200, {})
