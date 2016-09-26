@@ -170,7 +170,7 @@ async def matrix_transaction(request):
                                                     url_str)
                     await group.send_photo(img_file, caption=caption)
             else:
-                print('Unsupported message type {}'.format(content['msgtype'])
+                print('Unsupported message type {}'.format(content['msgtype']))
                 print(json.dumps(content, indent=4))
 
     return create_response(200, {})
