@@ -69,7 +69,6 @@ def sanitize_html(string):
     :param string: The HTML string to sanitized.
     :return: The sanitized HTML string.
     """
-    string = string.replace('\n', '')
     string = string.replace('<br>', '\n').replace('<br/>', '\n') \
                    .replace('<br />', '\n')
     soup = BeautifulSoup(string, 'html.parser')
@@ -321,7 +320,7 @@ async def aiotg_message(chat, match):
     try:
         room_id = TELEGRAM_CHATS[str(chat.id)]
     except KeyError:
-        print('Unknown telegram chat {}'.format(chat))
+        print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
