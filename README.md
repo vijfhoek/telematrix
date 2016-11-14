@@ -2,6 +2,25 @@
 
 A bridge between Telegram and [Matrix](http://matrix.org/). Currently under development - this project isn't considered to be in a usable state right now.
 
+## Installation
+### Dependencies
+
+First, create a virtualenv and activate it:
+
+```bash
+virtualenv venv -p $(which python3)
+. venv/bin/activate
+```
+
+Then install the requirements using pip:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Configuration
+TODO
+
 ## Contributions
 
 Want to help? Awesome! This bridge still needs a lot of work, so any help is welcome.
