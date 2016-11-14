@@ -117,7 +117,7 @@ async def shorten_url(url):
     """
     headers = {'Content-Type': 'application/json'}
     async with SHORTEN_SESS.post(GOO_GL_URL, params={'key': GOOGLE_TOKEN},
-                                 data=json.dumps({'longUrl': url}), 
+                                 data=json.dumps({'longUrl': url}),
                                  headers=headers) \
             as response:
         obj = await response.json()
