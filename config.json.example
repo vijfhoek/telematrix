@@ -8,13 +8,15 @@
 
     "hosts": {
         "internal": "http://127.0.0.1:PORT/",
-        "external": "https://DOMAIN.TLD/"
+        "external": "https://DOMAIN.TLD/",
+        "bare": "DOMAIN.TLD"
     },
 
     "chats": {
         "-TELEGRAM_ID": "!INTERNAL_ID:DOMAIN.TLD"
     },
 
-    "user_id_format": "@telegram_{}:DOMAIN.TLD"
+    "user_id_format": "@telegram_{}:DOMAIN.TLD",
+    "db_url": "sqlite:///database.db"
 }
 

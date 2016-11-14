@@ -1,3 +1,4 @@
 aiohttp==1.0.5
 aiotg==0.7.11
 beautifulsoup4==4.5.1
+sqlalchemy==1.1.3
