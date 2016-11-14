@@ -8,7 +8,6 @@ import html
 import json
 import logging
 import mimetypes
-import sys
 from datetime import datetime
 from time import time
 from urllib.parse import unquote, quote, urlparse, parse_qs
