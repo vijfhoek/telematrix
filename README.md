@@ -35,7 +35,13 @@ First, copy config.json.example to config.json. Then fill in the fields:
 
 **Synapse configuration**
 
-*TODO*
+Copy asconfig.yaml.example to asconfig.yaml, then fill in the fields:
+
+* `url`: The host and port of telematrix. Most likely `http://localhost:5000`.
+* `as_token`: `token.as` from telematrix config.
+* `hs_token`: `token.hs` from telematrix config.
+
+The rest of the config can be left as is.
 
 ## Contributions
 
