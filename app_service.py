@@ -26,7 +26,11 @@ try:
         HS_TOKEN = CONFIG['tokens']['hs']
         AS_TOKEN = CONFIG['tokens']['as']
         TG_TOKEN = CONFIG['tokens']['telegram']
-        GOOGLE_TOKEN = CONFIG['tokens']['google']
+
+        try:
+            GOOGLE_TOKEN = CONFIG['tokens']['google']
+        except KeyError:
+            GOOGLE_TOKEN = None
 
         MATRIX_HOST = CONFIG['hosts']['internal']
         MATRIX_HOST_EXT = CONFIG['hosts']['external']
@@ -119,6 +123,9 @@ async def shorten_url(url):
     :param url: The URL to shorten.
     :return: The shortened URL.
     """
+    if not GOOGLE_TOKEN:
+        return url
+
     headers = {'Content-Type': 'application/json'}
     async with SHORTEN_SESS.post(GOO_GL_URL, params={'key': GOOGLE_TOKEN},
                                  data=json.dumps({'longUrl': url}),
