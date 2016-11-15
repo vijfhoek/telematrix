@@ -12,10 +12,6 @@
         "bare": "DOMAIN.TLD"
     },
 
-    "chats": {
-        "-TELEGRAM_ID": "!INTERNAL_ID:DOMAIN.TLD"
-    },
-
     "user_id_format": "@telegram_{}:DOMAIN.TLD",
     "db_url": "sqlite:///database.db"
 }
