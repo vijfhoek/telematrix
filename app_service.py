@@ -433,17 +433,15 @@ async def aiotg_message(chat, match):
                                                  fw_from['last_name'])
         else:
             msg_from = '{} (Telegram)'.format(fw_from['first_name'])
-        date = datetime.fromtimestamp(fw_from['date'])
 
         quoted_msg = '\n'.join(['>{}'.format(x) for x in message.split('\n')])
-        quoted_msg = 'Forwarded from {}, who {} said:\n{}' \
-                     .format(msg_from, date, quoted_msg)
+        quoted_msg = 'Forwarded from {}, who said:\n{}' \
+                     .format(msg_from, quoted_msg)
 
         quoted_html = '<blockquote>{}</blockquote>' \
                       .format(html.escape(message).replace('\n', '<br />'))
-        quoted_html = '<i>Forwarded from {}, who {} said:</i>\n{}' \
-                      .format(html.escape(msg_from), html.escape(str(date)),
-                              quoted_html)
+        quoted_html = '<i>Forwarded from {}, who said:</i>\n{}' \
+                      .format(html.escape(msg_from), quoted_html)
         j = await send_matrix_message(room_id, user_id, txn_id,
                                       body=quoted_msg,
                                       formatted_body=quoted_html,
