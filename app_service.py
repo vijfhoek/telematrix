@@ -435,12 +435,12 @@ async def aiotg_message(chat, match):
             msg_from = '{} (Telegram)'.format(fw_from['first_name'])
 
         quoted_msg = '\n'.join(['>{}'.format(x) for x in message.split('\n')])
-        quoted_msg = 'Forwarded from {}, who said:\n{}' \
+        quoted_msg = 'Forwarded from {}:\n{}' \
                      .format(msg_from, quoted_msg)
 
         quoted_html = '<blockquote>{}</blockquote>' \
                       .format(html.escape(message).replace('\n', '<br />'))
-        quoted_html = '<i>Forwarded from {}, who said:</i>\n{}' \
+        quoted_html = '<i>Forwarded from {}:</i>\n{}' \
                       .format(html.escape(msg_from), quoted_html)
         j = await send_matrix_message(room_id, user_id, txn_id,
                                       body=quoted_msg,
@@ -456,20 +456,20 @@ async def aiotg_message(chat, match):
         else:
             msg_from = '{} (Telegram)'.format(re_msg['from']['first_name'])
         date = datetime.fromtimestamp(re_msg['date']) \
-               .strftime('on %Y-%m-%d at %H:%M:%S')
+               .strftime('%Y-%m-%d %H:%M:%S')
 
         quoted_msg = '\n'.join(['>{}'.format(x)
                                 for x in re_msg['text'].split('\n')])
-        quoted_msg = 'Reply to {}, who {} said:\n{}\n\n{}' \
+        quoted_msg = 'Reply to {} ({}):\n{}\n\n{}' \
                      .format(msg_from, date, quoted_msg, message)
 
+        html_message = html.escape(message).replace('\n', '<br />')
         quoted_html = '<blockquote>{}</blockquote>' \
                       .format(html.escape(re_msg['text'])
                               .replace('\n', '<br />'))
-        quoted_html = '<i>Reply to {}, who {} said:</i><br />{}<p>{}</p>' \
+        quoted_html = '<i>Reply to {} ({}):</i><br />{}<p>{}</p>' \
                       .format(html.escape(msg_from), html.escape(str(date)),
-                              quoted_html,
-                              html.escape(message).replace('\n', '<br />'))
+                              quoted_html, html_message)
 
         j = await send_matrix_message(room_id, user_id, txn_id,
                                       body=quoted_msg,
