@@ -41,7 +41,12 @@ Copy asconfig.yaml.example to asconfig.yaml, then fill in the fields:
 * `as_token`: `token.as` from telematrix config.
 * `hs_token`: `token.hs` from telematrix config.
 
-The rest of the config can be left as is.
+The rest of the config can be left as is. Finally, add a relative path to this config file in the Synapse's homeserver.yaml:
+
+```yaml
+app_service_config_files:
+    - "../telematrix/asconfig.yaml"
+```
 
 ## Contributions
 
