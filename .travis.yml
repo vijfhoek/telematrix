@@ -4,4 +4,4 @@ install:
     - "pip install -r requirements.txt"
     - "pip install pylint"
 script:
-    - "pylint app_service.py -E"
+    - "pylint app_service.py telematrix/*.py -E"
