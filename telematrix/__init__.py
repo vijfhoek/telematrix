@@ -205,6 +205,8 @@ async def matrix_transaction(request):
                 displayname = sender.name or get_username(user_id)
             content = event['content']
 
+            if 'msgtype' not in content:
+                continue
             if content['msgtype'] == 'm.text':
                 msg, mode = format_matrix_msg('<{}> {}', displayname, content)
                 await group.send_text(msg, parse_mode=mode)
