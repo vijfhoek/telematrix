@@ -16,7 +16,7 @@ from aiohttp import web, ClientSession
 from aiotg import Bot
 from bs4 import BeautifulSoup
 
-import database as db
+import telematrix.database as db
 
 # Read the configuration file
 try:
