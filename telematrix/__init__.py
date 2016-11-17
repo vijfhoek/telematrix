@@ -246,6 +246,7 @@ async def matrix_transaction(request):
                 displayname = get_username(user_id)
 
             if content['membership'] == 'join':
+                oldname = sender.name if sender else get_username(user_id)
                 displayname = content['displayname'] or get_username(user_id)
                 if not sender:
                     sender = db.MatrixUser(user_id, displayname)
@@ -253,7 +254,17 @@ async def matrix_transaction(request):
                     sender.name = displayname
                 db.session.add(sender)
 
-                msg = '> {} has joined the room'.format(displayname)
+                if 'unsigned' in event and 'prev_content' in event['unsigned']:
+                    prev = event['unsigned']['prev_content']
+                    if prev['membership'] == 'join':
+                        if 'displayname' in prev and prev['displayname']:
+                            oldname = prev['displayname']
+
+                        msg = '> {} changed their display name to {}'\
+                              .format(oldname, displayname)
+                else:
+                    msg = '> {} has joined the room'.format(displayname)
+
                 await group.send_text(msg)
             elif content['membership'] == 'leave':
                 msg = '< {} has left the room'.format(displayname)
