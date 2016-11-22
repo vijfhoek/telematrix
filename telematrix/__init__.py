@@ -184,95 +184,109 @@ async def matrix_transaction(request):
             continue
         group = TG_BOT.group(link.tg_room)
 
-        if event['type'] == 'm.room.message':
-            user_id = event['user_id']
-            if matrix_is_telegram(user_id):
-                continue
+        try:
+            if event['type'] == 'm.room.message':
+                user_id = event['user_id']
+                if matrix_is_telegram(user_id):
+                    continue
 
-            sender = db.session.query(db.MatrixUser)\
-                       .filter_by(matrix_id=user_id).first()
+                sender = db.session.query(db.MatrixUser)\
+                           .filter_by(matrix_id=user_id).first()
 
-            if not sender:
-                response = await matrix_get('client', 'profile/{}/displayname'
-                                                      .format(user_id), None)
-                try:
-                    displayname = response['displayname']
-                except KeyError:
-                    displayname = get_username(user_id)
-                sender = db.MatrixUser(user_id, displayname)
-                db.session.add(sender)
-            else:
-                displayname = sender.name or get_username(user_id)
-            content = event['content']
-
-            if 'msgtype' not in content:
-                continue
-            if content['msgtype'] == 'm.text':
-                msg, mode = format_matrix_msg('<{}> {}', displayname, content)
-                await group.send_text(msg, parse_mode=mode)
-            elif content['msgtype'] == 'm.notice':
-                msg, mode = format_matrix_msg('[{}] {}', displayname, content)
-                await group.send_text(msg, parse_mode=mode)
-            elif content['msgtype'] == 'm.emote':
-                msg, mode = format_matrix_msg('* {} {}', displayname, content)
-                await group.send_text(msg, parse_mode=mode)
-            elif content['msgtype'] == 'm.image':
-                url = urlparse(content['url'])
-                await download_matrix_file(url, content['body'])
-                with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
-                    url_str = MATRIX_HOST_EXT + \
-                              '_matrix/media/r0/download/{}{}' \
-                              .format(url.netloc, quote(url.path))
-                    url_str = await shorten_url(url_str)
-
-                    caption = '<{}> {} ({})'.format(displayname,
-                                                    content['body'], url_str)
-                    await group.send_photo(img_file, caption=caption)
-            else:
-                print('Unsupported message type {}'.format(content['msgtype']))
-                print(json.dumps(content, indent=4))
-        elif event['type'] == 'm.room.member':
-            if matrix_is_telegram(event['state_key']):
-                continue
-
-            user_id = event['state_key']
-            content = event['content']
-
-            sender = db.session.query(db.MatrixUser)\
-                       .filter_by(matrix_id=user_id).first()
-            if sender:
-                displayname = sender.name
-            else:
-                displayname = get_username(user_id)
-
-            if content['membership'] == 'join':
-                oldname = sender.name if sender else get_username(user_id)
-                displayname = content['displayname'] or get_username(user_id)
                 if not sender:
+                    response = await matrix_get('client', 'profile/{}/displayname'
+                                                          .format(user_id), None)
+                    try:
+                        displayname = response['displayname']
+                    except KeyError:
+                        displayname = get_username(user_id)
                     sender = db.MatrixUser(user_id, displayname)
+                    db.session.add(sender)
                 else:
-                    sender.name = displayname
-                db.session.add(sender)
+                    displayname = sender.name or get_username(user_id)
+                content = event['content']
 
-                if 'unsigned' in event and 'prev_content' in event['unsigned']:
-                    prev = event['unsigned']['prev_content']
-                    if prev['membership'] == 'join':
-                        if 'displayname' in prev and prev['displayname']:
-                            oldname = prev['displayname']
+                if 'msgtype' not in content:
+                    continue
 
-                        msg = '> {} changed their display name to {}'\
-                              .format(oldname, displayname)
+                if content['msgtype'] == 'm.text':
+                    msg, mode = format_matrix_msg('<{}> {}', displayname, content)
+                    await group.send_text(msg, parse_mode=mode)
+                elif content['msgtype'] == 'm.notice':
+                    msg, mode = format_matrix_msg('[{}] {}', displayname, content)
+                    await group.send_text(msg, parse_mode=mode)
+                elif content['msgtype'] == 'm.emote':
+                    msg, mode = format_matrix_msg('* {} {}', displayname, content)
+                    await group.send_text(msg, parse_mode=mode)
+                elif content['msgtype'] == 'm.image':
+                    try:
+                        url = urlparse(content['url'])
+                        await download_matrix_file(url, content['body'])
+                        with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
+                            url_str = MATRIX_HOST_EXT + \
+                                      '_matrix/media/r0/download/{}{}' \
+                                      .format(url.netloc, quote(url.path))
+                            url_str = await shorten_url(url_str)
+
+                            caption = '<{}> {} ({})'.format(displayname,
+                                                            content['body'], url_str)
+                            await group.send_photo(img_file, caption=caption)
+                    except:
+                        pass
                 else:
-                    msg = '> {} has joined the room'.format(displayname)
+                    print('Unsupported message type {}'.format(content['msgtype']))
+                    print(json.dumps(content, indent=4))
+            elif event['type'] == 'm.room.member':
+                if matrix_is_telegram(event['state_key']):
+                    continue
 
-                await group.send_text(msg)
-            elif content['membership'] == 'leave':
-                msg = '< {} has left the room'.format(displayname)
-                await group.send_text(msg)
-            elif content['membership'] == 'ban':
-                msg = '<! {} was banned from the room'.format(displayname)
-                await group.send_text(msg)
+                user_id = event['state_key']
+                content = event['content']
 
+                sender = db.session.query(db.MatrixUser)\
+                           .filter_by(matrix_id=user_id).first()
+                if sender:
+                    displayname = sender.name
+                else:
+                    displayname = get_username(user_id)
+
+                if content['membership'] == 'join':
+                    oldname = sender.name if sender else get_username(user_id)
+                    try:
+                        displayname = content['displayname'] or get_username(user_id)
+                    except KeyError:
+                        displayname = get_username(user_id)
+
+                    if not sender:
+                        sender = db.MatrixUser(user_id, displayname)
+                    else:
+                        sender.name = displayname
+                    db.session.add(sender)
+
+                    msg = None
+                    if 'unsigned' in event and 'prev_content' in event['unsigned']:
+                        prev = event['unsigned']['prev_content']
+                        if prev['membership'] == 'join':
+                            if 'displayname' in prev and prev['displayname']:
+                                oldname = prev['displayname']
+
+                            msg = '> {} changed their display name to {}'\
+                                  .format(oldname, displayname)
+                    else:
+                        msg = '> {} has joined the room'.format(displayname)
+
+                    if msg:
+                        await group.send_text(msg)
+                elif content['membership'] == 'leave':
+                    msg = '< {} has left the room'.format(displayname)
+                    await group.send_text(msg)
+                elif content['membership'] == 'ban':
+                    msg = '<! {} was banned from the room'.format(displayname)
+                    await group.send_text(msg)
+
+        except RuntimeError as e:
+            print('Got a runtime error:', e)
+            print('Group:', group)
 
     db.session.commit()
     return create_response(200, {})
