@@ -151,7 +151,13 @@ async def matrix_transaction(request):
     body = await request.json()
     events = body['events']
     for event in events:
-        print(event)
+        if event['age'] > 600000:
+            print('discarded event of age', event['age'])
+            continue
+        try:
+            print('{}: <{}> {}'.format(event['room_id'], event['user_id'], event['type']))
+        except KeyError:
+            pass
 
         if event['type'] == 'm.room.aliases':
             aliases = event['content']['aliases']
@@ -186,6 +192,7 @@ async def matrix_transaction(request):
                 user_id = event['user_id']
                 if matrix_is_telegram(user_id):
                     continue
+
 
                 sender = db.session.query(db.MatrixUser)\
                            .filter_by(matrix_id=user_id).first()
