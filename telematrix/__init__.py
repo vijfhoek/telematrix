@@ -173,8 +173,8 @@ async def matrix_transaction(request):
                 tg_id = alias.split('_')[1].split(':')[0]
                 link = db.ChatLink(event['room_id'], tg_id, True)
                 db.session.add(link)
+                db.session.commit()
 
-            db.session.commit()
             continue
 
         link = db.session.query(db.ChatLink)\
