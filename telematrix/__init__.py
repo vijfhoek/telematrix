@@ -40,11 +40,8 @@ try:
         MATRIX_MEDIA_PREFIX = MATRIX_HOST + '_matrix/media/r0/'
 
         USER_ID_FORMAT = CONFIG['user_id_format']
-
-        TELEGRAM_CHATS = CONFIG['chats']
-        MATRIX_ROOMS = {v: k for k, v in TELEGRAM_CHATS.items()}
-
         DATABASE_URL = CONFIG['db_url']
+
 except (OSError, IOError) as exception:
     print('Error opening config file:')
     print(exception)
@@ -354,7 +351,8 @@ async def matrix_room(request):
     chat = '_'.join(localpart.split('_')[1:])
 
     # Look up the chat in the database
-    if chat in TELEGRAM_CHATS:
+    link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
+    if link:
         await matrix_post('client', 'createRoom', None,
                           {'room_alias_name': localpart[1:]})
         return create_response(200, {})
@@ -408,12 +406,12 @@ async def register_join_matrix(chat, room_id, user_id):
 
 @TG_BOT.handle('photo')
 async def aiotg_photo(chat, photo):
-    try:
-        room_id = TELEGRAM_CHATS[str(chat.id)]
-    except KeyError:
-        print('Unknown telegram chat {}'.format(chat))
+    link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
+    if not link:
+        print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
+    room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}:{}'.format(chat.message['message_id'], chat.id))
 
