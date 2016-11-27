@@ -358,7 +358,7 @@ async def matrix_room(request):
     chat = '_'.join(localpart.split('_')[1:])
 
     # Look up the chat in the database
-    link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
+    link = db.session.query(db.ChatLink).filter_by(tg_room=chat).first()
     if link:
         await matrix_post('client', 'createRoom', None,
                           {'room_alias_name': localpart[1:]})
