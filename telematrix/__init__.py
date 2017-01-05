@@ -151,7 +151,7 @@ async def matrix_transaction(request):
     body = await request.json()
     events = body['events']
     for event in events:
-        if event['age'] > 600000:
+        if 'age' in event and event['age'] > 600000:
             print('discarded event of age', event['age'])
             continue
         try:
@@ -482,6 +482,8 @@ async def aiotg_message(chat, match):
 
     elif 'reply_to_message' in chat.message:
         re_msg = chat.message['reply_to_message']
+        if not 'text' in re_msg:
+            return
         if 'last_name' in re_msg['from']:
             msg_from = '{} {} (Telegram)'.format(re_msg['from']['first_name'],
                                                  re_msg['from']['last_name'])
