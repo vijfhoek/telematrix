@@ -376,15 +376,14 @@ def send_matrix_message(room_id, user_id, txn_id, **kwargs):
 async def upload_tgfile_to_matrix(file_id, user_id):
     file_path = (await TG_BOT.get_file(file_id))['file_path']
     request = await TG_BOT.download_file(file_path)
-    mimetype = request.headers['Content-Type']
 
     data = await request.read()
-    j = await matrix_post('media', 'upload', user_id, data, mimetype)
+    j = await matrix_post('media', 'upload', user_id, data, 'image/jpeg')
 
     if 'content_uri' in j:
-        return j['content_uri'], mimetype, len(data)
+        return j['content_uri'], len(data)
     else:
-        return None, None, 0
+        return None, 0
 
 
 async def register_join_matrix(chat, room_id, user_id):
@@ -399,7 +398,7 @@ async def register_join_matrix(chat, room_id, user_id):
     profile_photos = await TG_BOT.get_user_profile_photos(chat.sender['id'])
     try:
         pp_file_id = profile_photos['result']['photos'][0][-1]['file_id']
-        pp_uri, _, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
+        pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
         if pp_uri:
             await matrix_put('client', 'profile/{}/avatar_url'.format(user_id),
                              user_id, {'avatar_url': pp_uri})
@@ -423,11 +422,10 @@ async def aiotg_photo(chat, photo):
     txn_id = quote('{}:{}'.format(chat.message['message_id'], chat.id))
 
     file_id = photo[-1]['file_id']
-    uri, mime, length = await upload_tgfile_to_matrix(file_id, user_id)
-    info = {'mimetype': mime, 'size': length, 'h': photo[-1]['height'],
+    uri, length = await upload_tgfile_to_matrix(file_id, user_id)
+    info = {'mimetype': 'image/jpeg', 'size': length, 'h': photo[-1]['height'],
             'w': photo[-1]['width']}
-    body = 'Image_{}{}'.format(int(time() * 1000),
-                               mimetypes.guess_extension(mime))
+    body = 'Image_{}.jpg'.format(int(time() * 1000))
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
