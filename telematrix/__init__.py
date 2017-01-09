@@ -142,6 +142,16 @@ def matrix_is_telegram(user_id):
 def get_username(user_id):
     return user_id.split(':')[0][1:]
 
+mime_extensions = {
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/png': 'png',
+    'image/tiff': 'tif',
+    'image/x-tiff': 'tif',
+    'image/bmp': 'bmp',
+    'image/x-windows-bmp': 'bmp'
+}
+
 async def matrix_transaction(request):
     """
     Handle a transaction sent by the homeserver.
@@ -225,8 +235,16 @@ async def matrix_transaction(request):
                 elif content['msgtype'] == 'm.image':
                     try:
                         url = urlparse(content['url'])
+
+                        # Append the correct extension if it's missing or wrong
+                        ext = mime_extensions[content['info']['mimetype']]
+                        if not content['body'].endswith(ext):
+                            content['body'] += '.' + ext
+
+                        # Download the file
                         await download_matrix_file(url, content['body'])
                         with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
+                            # Create the URL and shorten it
                             url_str = MATRIX_HOST_EXT + \
                                       '_matrix/media/r0/download/{}{}' \
                                       .format(url.netloc, quote(url.path))
@@ -369,8 +387,8 @@ async def matrix_room(request):
 
 
 def send_matrix_message(room_id, user_id, txn_id, **kwargs):
-    return matrix_put('client', 'rooms/{}/send/m.room.message/{}'
-                      .format(room_id, txn_id), user_id, kwargs)
+    url = 'rooms/{}/send/m.room.message/{}'.format(room_id, txn_id)
+    return matrix_put('client', url, user_id, kwargs)
 
 
 async def upload_tgfile_to_matrix(file_id, user_id):
@@ -419,7 +437,7 @@ async def aiotg_photo(chat, photo):
 
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
-    txn_id = quote('{}:{}'.format(chat.message['message_id'], chat.id))
+    txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
 
     file_id = photo[-1]['file_id']
     uri, length = await upload_tgfile_to_matrix(file_id, user_id)
@@ -513,11 +531,10 @@ async def aiotg_message(chat, match):
                                       msgtype='m.text')
 
     if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
-        await asyncio.sleep(0.1)
         await register_join_matrix(chat, room_id, user_id)
-        await asyncio.sleep(0.1)
-        await send_matrix_message(room_id, user_id, txn_id, body=message,
-                                  msgtype='m.text')
+        await asyncio.sleep(0.5)
+        j = await send_matrix_message(room_id, user_id, txn_id + 'join',
+                                      body=message, msgtype='m.text')
 
 
 def main():
