@@ -445,7 +445,6 @@ async def aiotg_photo(chat, photo):
             'w': photo[-1]['width']}
     body = 'Image_{}.jpg'.format(int(time() * 1000))
 
-    pprint(chat.message)
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
                                       url=uri, info=info, msgtype='m.image')
