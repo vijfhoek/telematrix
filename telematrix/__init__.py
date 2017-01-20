@@ -445,13 +445,21 @@ async def aiotg_photo(chat, photo):
             'w': photo[-1]['width']}
     body = 'Image_{}.jpg'.format(int(time() * 1000))
 
+    pprint(chat.message)
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
                                       url=uri, info=info, msgtype='m.image')
+
         if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
             await register_join_matrix(chat, room_id, user_id)
-            await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.image')
+            await send_matrix_message(room_id, user_id, txn_id + 'join',
+                                      body=body, url=uri, info=info,
+                                      msgtype='m.image')
+
+        if 'caption' in chat.message:
+            await send_matrix_message(room_id, user_id, txn_id + 'caption',
+                                      body=chat.message['caption'],
+                                      msgtype='m.text')
 
 
 @TG_BOT.command(r'/alias')
@@ -498,7 +506,7 @@ async def aiotg_message(chat, match):
 
     elif 'reply_to_message' in chat.message:
         re_msg = chat.message['reply_to_message']
-        if not 'text' in re_msg:
+        if not 'text' in re_msg and not 'photo' in re_msg:
             return
         if 'last_name' in re_msg['from']:
             msg_from = '{} {} (Telegram)'.format(re_msg['from']['first_name'],
@@ -508,18 +516,26 @@ async def aiotg_message(chat, match):
         date = datetime.fromtimestamp(re_msg['date']) \
                .strftime('%Y-%m-%d %H:%M:%S')
 
-        quoted_msg = '\n'.join(['>{}'.format(x)
-                                for x in re_msg['text'].split('\n')])
-        quoted_msg = 'Reply to {} ({}):\n{}\n\n{}' \
-                     .format(msg_from, date, quoted_msg, message)
-
         html_message = html.escape(message).replace('\n', '<br />')
-        quoted_html = '<blockquote>{}</blockquote>' \
-                      .format(html.escape(re_msg['text'])
-                              .replace('\n', '<br />'))
-        quoted_html = '<i>Reply to {} ({}):</i><br />{}<p>{}</p>' \
-                      .format(html.escape(msg_from), html.escape(str(date)),
-                              quoted_html, html_message)
+        if 'text' in re_msg['from']:
+            quoted_msg = '\n'.join(['>{}'.format(x)
+                                    for x in re_msg['text'].split('\n')])
+            quoted_msg = 'Reply to {} ({}):\n{}\n\n{}' \
+                         .format(msg_from, date, quoted_msg, message)
+
+            quoted_html = '<blockquote>{}</blockquote>' \
+                          .format(html.escape(re_msg['text'])
+                                  .replace('\n', '<br />'))
+            quoted_html = '<i>Reply to {} ({}):</i><br />{}<p>{}</p>' \
+                          .format(html.escape(msg_from), html.escape(str(date)),
+                                  quoted_html, html_message)
+        else:
+            quoted_msg = 'Reply to {} ({})\n\n{}' \
+                         .format(msg_from, date, message)
+            quoted_html = '<i>Reply to {} ({})</i><br /><p>{}</p>' \
+                          .format(html.escape(msg_from), html.escape(str(date)),
+                                  html_message)
+
 
         j = await send_matrix_message(room_id, user_id, txn_id,
                                       body=quoted_msg,
