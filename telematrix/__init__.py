@@ -11,7 +11,9 @@ import mimetypes
 from datetime import datetime
 from time import time
 from urllib.parse import unquote, quote, urlparse, parse_qs
+from io import BytesIO
 
+from PIL import Image
 from aiohttp import web, ClientSession
 from aiotg import Bot
 from bs4 import BeautifulSoup
@@ -391,15 +393,24 @@ def send_matrix_message(room_id, user_id, txn_id, **kwargs):
     return matrix_put('client', url, user_id, kwargs)
 
 
-async def upload_tgfile_to_matrix(file_id, user_id):
+async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_to=None):
     file_path = (await TG_BOT.get_file(file_id))['file_path']
     request = await TG_BOT.download_file(file_path)
-
     data = await request.read()
-    j = await matrix_post('media', 'upload', user_id, data, 'image/jpeg')
+
+    if convert_to:
+        image = Image.open(BytesIO(data))
+        png_image = BytesIO(None)
+        image.save(png_image, convert_to)
+
+        j = await matrix_post('media', 'upload', user_id, png_image.getvalue(), mime)
+        length = len(png_image.getvalue())
+    else:
+        j = await matrix_post('media', 'upload', user_id, data, mime)
+        length = len(data)
 
     if 'content_uri' in j:
-        return j['content_uri'], len(data)
+        return j['content_uri'], length
     else:
         return None, 0
 
@@ -427,6 +438,38 @@ async def register_join_matrix(chat, room_id, user_id):
                      user_id, {'displayname': name})
     await matrix_post('client', 'join/{}'.format(room_id), user_id, {})
 
+@TG_BOT.handle('sticker')
+async def aiotg_sticker(chat, sticker):
+    link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
+    if not link:
+        print('Unknown telegram chat {}: {}'.format(chat, chat.id))
+        return
+
+    room_id = link.matrix_room
+    user_id = USER_ID_FORMAT.format(chat.sender['id'])
+    txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
+
+    file_id = sticker['file_id']
+    uri, length = await upload_tgfile_to_matrix(file_id, user_id, 'image/png', 'PNG')
+
+    info = {'mimetype': 'image/png', 'size': length, 'h': sticker['height'],
+            'w': sticker['width']}
+    body = 'Sticker_{}.png'.format(int(time() * 1000))
+
+    if uri:
+        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
+                                      url=uri, info=info, msgtype='m.image')
+
+        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
+            await register_join_matrix(chat, room_id, user_id)
+            await send_matrix_message(room_id, user_id, txn_id + 'join',
+                                      body=body, url=uri, info=info,
+                                      msgtype='m.image')
+
+        if 'caption' in chat.message:
+            await send_matrix_message(room_id, user_id, txn_id + 'caption',
+                                      body=chat.message['caption'],
+                                      msgtype='m.text')
 
 @TG_BOT.handle('photo')
 async def aiotg_photo(chat, photo):
