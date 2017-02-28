@@ -227,13 +227,13 @@ async def matrix_transaction(request):
 
                 if content['msgtype'] == 'm.text':
                     msg, mode = format_matrix_msg('<{}> {}', displayname, content)
-                    await group.send_text(msg, parse_mode=mode)
+                    response = await group.send_text(msg, parse_mode=mode)
                 elif content['msgtype'] == 'm.notice':
                     msg, mode = format_matrix_msg('[{}] {}', displayname, content)
-                    await group.send_text(msg, parse_mode=mode)
+                    response = await group.send_text(msg, parse_mode=mode)
                 elif content['msgtype'] == 'm.emote':
                     msg, mode = format_matrix_msg('* {} {}', displayname, content)
-                    await group.send_text(msg, parse_mode=mode)
+                    response = await group.send_text(msg, parse_mode=mode)
                 elif content['msgtype'] == 'm.image':
                     try:
                         url = urlparse(content['url'])
@@ -254,12 +254,13 @@ async def matrix_transaction(request):
 
                             caption = '<{}> {} ({})'.format(displayname,
                                                             content['body'], url_str)
-                            await group.send_photo(img_file, caption=caption)
+                            response = await group.send_photo(img_file, caption=caption)
                     except:
                         pass
                 else:
                     print('Unsupported message type {}'.format(content['msgtype']))
                     print(json.dumps(content, indent=4))
+
             elif event['type'] == 'm.room.member':
                 if matrix_is_telegram(event['state_key']):
                     continue
@@ -300,13 +301,22 @@ async def matrix_transaction(request):
                         msg = '> {} has joined the room'.format(displayname)
 
                     if msg:
-                        await group.send_text(msg)
+                        response = await group.send_text(msg)
                 elif content['membership'] == 'leave':
                     msg = '< {} has left the room'.format(displayname)
-                    await group.send_text(msg)
+                    response = await group.send_text(msg)
                 elif content['membership'] == 'ban':
                     msg = '<! {} was banned from the room'.format(displayname)
-                    await group.send_text(msg)
+                    response = await group.send_text(msg)
+
+            if response:
+                message = db.Message(
+                    response['result']['chat']['id'],
+                    response['result']['message_id'],
+                    event['room_id'],
+                    event['event_id'],
+                    displayname)
+                db.session.add(message)
 
         except RuntimeError as e:
             print('Got a runtime error:', e)
@@ -470,6 +480,19 @@ async def aiotg_sticker(chat, sticker):
             await send_matrix_message(room_id, user_id, txn_id + 'caption',
                                       body=chat.message['caption'],
                                       msgtype='m.text')
+        if 'event_id' in j:
+            name = chat.sender['first_name']
+            if 'last_name' in chat.sender:
+                name += " " + chat.sender['last_name']
+            name += " (Telegram)"
+            message = db.Message(
+                    chat.message['chat']['id'],
+                    chat.message['message_id'],
+                    room_id,
+                    j['event_id'],
+                    name)
+            db.session.add(message)
+            db.session.commit()
 
 @TG_BOT.handle('photo')
 async def aiotg_photo(chat, photo):
@@ -503,6 +526,19 @@ async def aiotg_photo(chat, photo):
                                       body=chat.message['caption'],
                                       msgtype='m.text')
 
+        if 'event_id' in j:
+            name = chat.sender['first_name']
+            if 'last_name' in chat.sender:
+                name += " " + chat.sender['last_name']
+            name += " (Telegram)"
+            message = db.Message(
+                    chat.message['chat']['id'],
+                    chat.message['message_id'],
+                    room_id,
+                    j['event_id'],
+                    name)
+            db.session.add(message)
+            db.session.commit()
 
 @TG_BOT.command(r'/alias')
 async def aiotg_alias(chat, match):
@@ -548,7 +584,7 @@ async def aiotg_message(chat, match):
 
     elif 'reply_to_message' in chat.message:
         re_msg = chat.message['reply_to_message']
-        if not 'text' in re_msg and not 'photo' in re_msg:
+        if not 'text' in re_msg and not 'photo' in re_msg and not 'sticker' in re_msg:
             return
         if 'last_name' in re_msg['from']:
             msg_from = '{} {} (Telegram)'.format(re_msg['from']['first_name'],
@@ -558,26 +594,32 @@ async def aiotg_message(chat, match):
         date = datetime.fromtimestamp(re_msg['date']) \
                .strftime('%Y-%m-%d %H:%M:%S')
 
+        reply_mx_id = db.session.query(db.Message)\
+                .filter_by(tg_group_id=chat.message['chat']['id'], tg_message_id=chat.message['reply_to_message']['message_id']).first()
+
         html_message = html.escape(message).replace('\n', '<br />')
-        if 'text' in re_msg['from']:
+        if 'text' in re_msg:
             quoted_msg = '\n'.join(['>{}'.format(x)
                                     for x in re_msg['text'].split('\n')])
-            quoted_msg = 'Reply to {} ({}):\n{}\n\n{}' \
-                         .format(msg_from, date, quoted_msg, message)
-
             quoted_html = '<blockquote>{}</blockquote>' \
                           .format(html.escape(re_msg['text'])
                                   .replace('\n', '<br />'))
-            quoted_html = '<i>Reply to {} ({}):</i><br />{}<p>{}</p>' \
-                          .format(html.escape(msg_from), html.escape(str(date)),
+        else:
+            quoted_msg = ''
+            quoted_html = ''
+
+        if reply_mx_id:
+            quoted_msg = 'Reply to {}:\n{}\n\n{}' \
+                         .format(reply_mx_id.displayname, quoted_msg, message)
+            quoted_html = '<i><a href="https://matrix.to/#/{}/{}">Reply to {}</a>:</i><br />{}<p>{}</p>' \
+                          .format(html.escape(room_id), html.escape(reply_mx_id.matrix_event_id), html.escape(reply_mx_id.displayname),
                                   quoted_html, html_message)
         else:
-            quoted_msg = 'Reply to {} ({})\n\n{}' \
-                         .format(msg_from, date, message)
-            quoted_html = '<i>Reply to {} ({})</i><br /><p>{}</p>' \
-                          .format(html.escape(msg_from), html.escape(str(date)),
-                                  html_message)
-
+            quoted_msg = 'Reply to {}:\n{}\n\n{}' \
+                         .format(msg_from, quoted_msg, message)
+            quoted_html = '<i>Reply to {}:</i><br />{}<p>{}</p>' \
+                          .format(html.escape(msg_from),
+                                  quoted_html, html_message)
 
         j = await send_matrix_message(room_id, user_id, txn_id,
                                       body=quoted_msg,
@@ -593,6 +635,19 @@ async def aiotg_message(chat, match):
         await asyncio.sleep(0.5)
         j = await send_matrix_message(room_id, user_id, txn_id + 'join',
                                       body=message, msgtype='m.text')
+    elif 'event_id' in j:
+        name = chat.sender['first_name']
+        if 'last_name' in chat.sender:
+            name += " " + chat.sender['last_name']
+        name += " (Telegram)"
+        message = db.Message(
+                chat.message['chat']['id'],
+                chat.message['message_id'],
+                room_id,
+                j['event_id'],
+                name)
+        db.session.add(message)
+        db.session.commit()
 
 
 def main():

@@ -52,6 +52,27 @@ class MatrixUser(Base):
         self.matrix_id = matrix_id
         self.name = name
 
+class Message(Base):
+    """Describes a message in a room bridged between Telegram and Matrix"""
+    __tablename__ = "message"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    tg_group_id = sa.Column(sa.BigInteger)
+    tg_message_id = sa.Column(sa.BigInteger)
+
+    matrix_room_id = sa.Column(sa.String)
+    matrix_event_id = sa.Column(sa.String)
+
+    displayname = sa.Column(sa.String)
+
+    def __init__(self, tg_group_id, tg_message_id, matrix_room_id, matrix_event_id, displayname):
+        self.tg_group_id = tg_group_id
+        self.tg_message_id = tg_message_id
+
+        self.matrix_room_id = matrix_room_id
+        self.matrix_event_id = matrix_event_id
+
+        self.displayname = displayname
 
 def initialize(*args, **kwargs):
     """Initializes the database and creates tables if necessary."""
