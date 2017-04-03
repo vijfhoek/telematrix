@@ -471,14 +471,20 @@ async def update_matrix_displayname_avatar(tg_user):
             await matrix_put('client', 'profile/{}/displayname'.format(user_id), user_id, {'displayname': name})
             db_user.name = name
         if db_user.profile_pic_id != pp_file_id:
-            pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
-            await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':pp_uri})
+            if pp_file_id:
+                pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
+                await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':pp_uri})
+            else:
+                await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':None})
             db_user.profile_pic_id = pp_file_id
     else:
         db_user = db.TgUser(tg_user['id'], name, pp_file_id)
         await matrix_put('client', 'profile/{}/displayname'.format(user_id), user_id, {'displayname': name})
-        pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
-        await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':pp_uri})
+        if pp_file_id:
+            pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
+            await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':pp_uri})
+        else:
+            await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':None})
         db.session.add(db_user)
     db.session.commit()
         
