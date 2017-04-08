@@ -171,7 +171,7 @@ async def matrix_transaction(request):
         except KeyError:
             pass
 
-        if event['type'] == 'm.room.aliases':
+        if event['type'] == 'm.room.aliases' and event['state_key'] == MATRIX_HOST_BARE:
             aliases = event['content']['aliases']
 
             links = db.session.query(db.ChatLink)\
