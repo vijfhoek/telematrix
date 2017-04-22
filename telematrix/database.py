@@ -32,9 +32,9 @@ class TgUser(Base):
     id = sa.Column(sa.Integer, primary_key=True)
     tg_id = sa.Column(sa.BigInteger)
     name = sa.Column(sa.String)
-    profile_pic_id = sa.Column(sa.String)
+    profile_pic_id = sa.Column(sa.String, nullable=True)
 
-    def __init__(self, tg_id, name, profile_pic_id):
+    def __init__(self, tg_id, name, profile_pic_id=None):
         self.tg_id = tg_id
         self.name = name
         self.profile_pic_id = profile_pic_id

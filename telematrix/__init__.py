@@ -171,7 +171,7 @@ async def matrix_transaction(request):
         except KeyError:
             pass
 
-        if event['type'] == 'm.room.aliases':
+        if event['type'] == 'm.room.aliases' and event['state_key'] == MATRIX_HOST_BARE:
             aliases = event['content']['aliases']
 
             links = db.session.query(db.ChatLink)\
@@ -200,6 +200,8 @@ async def matrix_transaction(request):
         group = TG_BOT.group(link.tg_room)
 
         try:
+            response = None
+
             if event['type'] == 'm.room.message':
                 user_id = event['user_id']
                 if matrix_is_telegram(user_id):
@@ -448,12 +450,53 @@ async def register_join_matrix(chat, room_id, user_id):
                      user_id, {'displayname': name})
     await matrix_post('client', 'join/{}'.format(room_id), user_id, {})
 
+async def update_matrix_displayname_avatar(tg_user):
+    name = tg_user['first_name']
+    if 'last_name' in tg_user:
+        name += ' ' + tg_user['last_name']
+    name += ' (Telegram)'
+    user_id = USER_ID_FORMAT.format(tg_user['id'])
+    
+    db_user = db.session.query(db.TgUser).filter_by(tg_id=tg_user['id']).first()
+
+    profile_photos = await TG_BOT.get_user_profile_photos(tg_user['id'])
+    pp_file_id = None
+    try:
+        pp_file_id = profile_photos['result']['photos'][0][-1]['file_id']
+    except:
+        pp_file_id = None
+
+    if db_user:
+        if db_user.name != name:
+            await matrix_put('client', 'profile/{}/displayname'.format(user_id), user_id, {'displayname': name})
+            db_user.name = name
+        if db_user.profile_pic_id != pp_file_id:
+            if pp_file_id:
+                pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
+                await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':pp_uri})
+            else:
+                await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':None})
+            db_user.profile_pic_id = pp_file_id
+    else:
+        db_user = db.TgUser(tg_user['id'], name, pp_file_id)
+        await matrix_put('client', 'profile/{}/displayname'.format(user_id), user_id, {'displayname': name})
+        if pp_file_id:
+            pp_uri, _ = await upload_tgfile_to_matrix(pp_file_id, user_id)
+            await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':pp_uri})
+        else:
+            await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':None})
+        db.session.add(db_user)
+    db.session.commit()
+        
+
 @TG_BOT.handle('sticker')
 async def aiotg_sticker(chat, sticker):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
+
+    await update_matrix_displayname_avatar(chat.sender);
 
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
@@ -501,6 +544,7 @@ async def aiotg_photo(chat, photo):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
+    await update_matrix_displayname_avatar(chat.sender);
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -555,6 +599,7 @@ async def aiotg_message(chat, match):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
+    await update_matrix_displayname_avatar(chat.sender);
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}:{}'.format(chat.message['message_id'], chat.id))
 
