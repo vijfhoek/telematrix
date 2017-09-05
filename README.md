@@ -2,6 +2,16 @@
 
 A bridge between Telegram and [Matrix](http://matrix.org/). Currently under development — this project isn't considered to be in a usable state right now.
 
+## Usage
+After the [installation](#installation), follow these steps to bridge a matrix room to a telegram group chat or channel:  
+ - Invite the bot to the telegram chat.
+ - Send `/alias` in the telegram chat.
+ - The bot will answer with an alias, something like `#telegram_-XXXXXXXXX:yourserver.example`. Add that as an alias to the matrix room you want to bridge.
+ 
+In case it doesn't work make sure that all these are true:
+ - You are on the same server as the brigde. If that is not the case, you can't set the alias, because you can only set aliases on the server you are on.
+ - The matrix room is not set to invite only. The bridge currently doesn't support invite only rooms, so the rooms must be set to be open for all. Guests access is not required though.
+
 ## Installation
 ### Dependencies
 
