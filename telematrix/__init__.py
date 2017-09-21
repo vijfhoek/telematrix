@@ -98,7 +98,7 @@ def format_matrix_msg(form, username, content):
     :return: The formatted string.
     """
     if 'format' in content and content['format'] == 'org.matrix.custom.html':
-        re.sub("<a href=\"https://matrix.to/#/@telegram_([0-9]+):{}\">(.+?)</a>".format(MATRIX_HOST_BARE), "<a href=\"tg://user?id=\\1\">\\2</a>", content['formatted_body'])
+        re.sub("<a href=\\\"https://matrix.to/#/@telegram_([0-9]+):{}\\\">(.+?)</a>".format(MATRIX_HOST_BARE), "<a href=\"tg://user?id=\\1\">\\2</a>", content['formatted_body'])
         sanitized = sanitize_html(content['formatted_body'])
         return html.escape(form).format(username, sanitized), 'HTML'
     else:
