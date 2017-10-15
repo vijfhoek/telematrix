@@ -8,6 +8,7 @@ import html
 import json
 import logging
 import mimetypes
+import sys
 from datetime import datetime
 from time import time
 from urllib.parse import unquote, quote, urlparse, parse_qs
@@ -137,12 +138,27 @@ async def shorten_url(url):
     else:
         return url
 
+
 def matrix_is_telegram(user_id):
+    """
+    Checks if a Matrix user_id is a Telegram user
+
+    :param user_id: The Matrix user_id to check.
+    :return: True if the user is a Telegram user
+    """
     username = user_id.split(':')[0][1:]
     return username.startswith('telegram_')
 
+
 def get_username(user_id):
+    """
+    Gets the username of a Matrix user_id
+
+    :param user_id: The Matrix user_id to extract the username from.
+    :return: The username
+    """
     return user_id.split(':')[0][1:]
+
 
 mime_extensions = {
     'image/jpeg': 'jpg',
@@ -154,6 +170,192 @@ mime_extensions = {
     'image/x-windows-bmp': 'bmp'
 }
 
+async def _matrix_on_aliases(event, link, _):
+    """Handles an m.room.aliases event from the Matrix homeserver."""
+
+    # Discard events that are not from the linked server
+    if event['state_key'] != MATRIX_HOST_BARE:
+        return
+
+    # Delete all old links for the room
+    links = db.session.query(db.ChatLink)\
+              .filter_by(matrix_room=event['room_id']).all()
+    for link in links:
+        db.session.delete(link)
+
+    # Add all relevant aliases to the database
+    aliases = event['content']['aliases']
+    for alias in aliases:
+        if alias.split('_')[0] != '#telegram' or alias.split(':')[-1] != MATRIX_HOST_BARE:
+            continue
+
+        telegram_id = alias.split('_')[1].split(':')[0]
+        link = db.ChatLink(event['room_id'], telegram_id, True)
+        db.session.add(link)
+
+    db.session.commit()
+
+async def _matrix_on_message_image(displayname, group, content):
+    """
+    Handles an m.image in an m.room.message event from the Matrix homeserver.
+    """
+
+    url = urlparse(content['url'])
+
+    # Append the correct extension if it's missing or wrong
+    extension = mime_extensions[content['info']['mimetype']]
+    if not content['body'].endswith(extension):
+        content['body'] += '.' + extension
+
+    # Download the file
+    await download_matrix_file(url, content['body'])
+    with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
+        # Create the URL and shorten it
+        url_str = '{}_matrix/media/r0/download/{}{}' \
+                  .format(MATRIX_HOST_EXT, url.netloc, quote(url.path))
+        url_str = await shorten_url(url_str)
+
+        caption = '<{}> {} ({})'.format(displayname, content['body'], url_str)
+        return await group.send_photo(img_file, caption=caption)
+
+
+async def _matrix_on_message(event, _, group):
+    """Handles an m.room.message event from the Matrix homeserver."""
+
+    user_id = event['user_id']
+    content = event['content']
+
+    # Ignore own or unsupported messages
+    if matrix_is_telegram(user_id) or 'msgtype' not in content:
+        return
+
+    sender = db.session.query(db.MatrixUser).filter_by(matrix_id=user_id).first()
+    if not sender:
+        response = await matrix_get('client', 'profile/{}/displayname'.format(user_id), None)
+        try:
+            displayname = response['displayname']
+        except KeyError:
+            displayname = get_username(user_id)
+
+        sender = db.MatrixUser(user_id, displayname)
+        db.session.add(sender)
+        db.session.commit()
+    else:
+        displayname = sender.name or get_username(user_id)
+
+
+    if content['msgtype'] == 'm.text':
+        msg, mode = format_matrix_msg('<{}> {}', displayname, content)
+        response = await group.send_text(msg, parse_mode=mode)
+    elif content['msgtype'] == 'm.notice':
+        msg, mode = format_matrix_msg('[{}] {}', displayname, content)
+        response = await group.send_text(msg, parse_mode=mode)
+    elif content['msgtype'] == 'm.emote':
+        msg, mode = format_matrix_msg('* {} {}', displayname, content)
+        response = await group.send_text(msg, parse_mode=mode)
+    elif content['msgtype'] == 'm.image':
+        try:
+            response = await _matrix_on_message_image(displayname, group, content)
+        except Exception as e:
+            print(f'Error bridging image from Matrix to Telegram: {e}', file=sys.stderr)
+            response = None
+    else:
+        print(f'Unsupported message type {content["msgtype"]}', file=sys.stderr)
+        response = None
+
+    if response:
+        message = db.Message(response['result']['chat']['id'], response['result']['message_id'],
+                             event['room_id'], event['event_id'], displayname)
+        db.session.add(message)
+        db.session.commit()
+
+    return response
+
+
+async def _matrix_on_member(event, _, group):
+    """Handles an m.room.member event from the Matrix homeserver."""
+
+    # Ignore own events
+    if matrix_is_telegram(event['state_key']):
+        return
+
+    user_id = event['state_key']
+    content = event['content']
+
+    sender = db.session.query(db.MatrixUser).filter_by(matrix_id=user_id).first()
+    displayname = sender.name if sender else get_username(user_id)
+
+    if content['membership'] == 'join':
+        oldname = displayname
+
+        try:
+            displayname = content['displayname'] or get_username(user_id)
+        except KeyError:
+            displayname = get_username(user_id)
+
+        if not sender:
+            sender = db.MatrixUser(user_id, displayname)
+        else:
+            sender.name = displayname
+
+        db.session.add(sender)
+        db.session.commit()
+
+        msg = None
+        if 'unsigned' in event and 'prev_content' in event['unsigned']:
+            prev = event['unsigned']['prev_content']
+            if prev['membership'] == 'join':
+                if 'displayname' in prev and prev['displayname']:
+                    oldname = prev['displayname']
+
+                msg = f'> {oldname} changed their display name to {displayname}'
+        else:
+            msg = f'> {displayname} has joined the room'
+
+        if msg:
+            return await group.send_text(msg)
+    elif content['membership'] == 'leave':
+        msg = f'< {displayname} has left the room'
+        return await group.send_text(msg)
+    elif content['membership'] == 'ban':
+        msg = f'<! {displayname} was banned from the room'
+        return await group.send_text(msg)
+
+
+async def _matrix_event(event):
+    """Handles an event from the Matrix homeserver."""
+
+    # Discard old events, so the Telegram side is not spammed
+    if 'age' in event and event['age'] > 600000:
+        print('discarded event of age', event['age'])
+        return
+
+    # Retrieve information about the bridged room
+    link = db.session.query(db.ChatLink).filter_by(matrix_room=event['room_id']).first()
+    if not link and event['type'] != 'm.room.aliases':
+        print(f'{event["room_id"]} isn\'t linked!', file=sys.stderr)
+        return
+
+
+    EVENT_HANDLERS = {
+        'm.room.aliases': _matrix_on_aliases,
+        'm.room.message': _matrix_on_message,
+        'm.room.member': _matrix_on_member
+    }
+
+    try:
+        event_handler = EVENT_HANDLERS[event['type']]
+    except KeyError:
+        print(f'No EVENT_HANDLER for {event["type"]}', file=sys.stderr)
+        return
+
+    try:
+        group = TG_BOT.group(link.tg_room)
+        await event_handler(event, link, group)
+    except Exception as e:
+        print(f'Got an exception ({e}) in group {group}')
+
+
 async def matrix_transaction(request):
     """
     Handle a transaction sent by the homeserver.
@@ -161,218 +363,63 @@ async def matrix_transaction(request):
     :return: The response to send.
     """
     body = await request.json()
-    events = body['events']
-    for event in events:
-        if 'age' in event and event['age'] > 600000:
-            print('discarded event of age', event['age'])
-            continue
-        try:
-            print('{}: <{}> {}'.format(event['room_id'], event['user_id'], event['type']))
-        except KeyError:
-            pass
+    for event in body['events']:
+        _matrix_event(event)
 
-        if event['type'] == 'm.room.aliases' and event['state_key'] == MATRIX_HOST_BARE:
-            aliases = event['content']['aliases']
-
-            links = db.session.query(db.ChatLink)\
-                      .filter_by(matrix_room=event['room_id']).all()
-            for link in links:
-                db.session.delete(link)
-
-            for alias in aliases:
-                print(alias)
-                if alias.split('_')[0] != '#telegram' \
-                        or alias.split(':')[-1] != MATRIX_HOST_BARE:
-                    continue
-
-                tg_id = alias.split('_')[1].split(':')[0]
-                link = db.ChatLink(event['room_id'], tg_id, True)
-                db.session.add(link)
-                db.session.commit()
-
-            continue
-
-        link = db.session.query(db.ChatLink)\
-                 .filter_by(matrix_room=event['room_id']).first()
-        if not link:
-            print('{} isn\'t linked!'.format(event['room_id']))
-            continue
-        group = TG_BOT.group(link.tg_room)
-
-        try:
-            response = None
-
-            if event['type'] == 'm.room.message':
-                user_id = event['user_id']
-                if matrix_is_telegram(user_id):
-                    continue
-
-
-                sender = db.session.query(db.MatrixUser)\
-                           .filter_by(matrix_id=user_id).first()
-
-                if not sender:
-                    response = await matrix_get('client', 'profile/{}/displayname'
-                                                          .format(user_id), None)
-                    try:
-                        displayname = response['displayname']
-                    except KeyError:
-                        displayname = get_username(user_id)
-                    sender = db.MatrixUser(user_id, displayname)
-                    db.session.add(sender)
-                else:
-                    displayname = sender.name or get_username(user_id)
-                content = event['content']
-
-                if 'msgtype' not in content:
-                    continue
-
-                if content['msgtype'] == 'm.text':
-                    msg, mode = format_matrix_msg('<{}> {}', displayname, content)
-                    response = await group.send_text(msg, parse_mode=mode)
-                elif content['msgtype'] == 'm.notice':
-                    msg, mode = format_matrix_msg('[{}] {}', displayname, content)
-                    response = await group.send_text(msg, parse_mode=mode)
-                elif content['msgtype'] == 'm.emote':
-                    msg, mode = format_matrix_msg('* {} {}', displayname, content)
-                    response = await group.send_text(msg, parse_mode=mode)
-                elif content['msgtype'] == 'm.image':
-                    try:
-                        url = urlparse(content['url'])
-
-                        # Append the correct extension if it's missing or wrong
-                        ext = mime_extensions[content['info']['mimetype']]
-                        if not content['body'].endswith(ext):
-                            content['body'] += '.' + ext
-
-                        # Download the file
-                        await download_matrix_file(url, content['body'])
-                        with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
-                            # Create the URL and shorten it
-                            url_str = MATRIX_HOST_EXT + \
-                                      '_matrix/media/r0/download/{}{}' \
-                                      .format(url.netloc, quote(url.path))
-                            url_str = await shorten_url(url_str)
-
-                            caption = '<{}> {} ({})'.format(displayname,
-                                                            content['body'], url_str)
-                            response = await group.send_photo(img_file, caption=caption)
-                    except:
-                        pass
-                else:
-                    print('Unsupported message type {}'.format(content['msgtype']))
-                    print(json.dumps(content, indent=4))
-
-            elif event['type'] == 'm.room.member':
-                if matrix_is_telegram(event['state_key']):
-                    continue
-
-                user_id = event['state_key']
-                content = event['content']
-
-                sender = db.session.query(db.MatrixUser)\
-                           .filter_by(matrix_id=user_id).first()
-                if sender:
-                    displayname = sender.name
-                else:
-                    displayname = get_username(user_id)
-
-                if content['membership'] == 'join':
-                    oldname = sender.name if sender else get_username(user_id)
-                    try:
-                        displayname = content['displayname'] or get_username(user_id)
-                    except KeyError:
-                        displayname = get_username(user_id)
-
-                    if not sender:
-                        sender = db.MatrixUser(user_id, displayname)
-                    else:
-                        sender.name = displayname
-                    db.session.add(sender)
-
-                    msg = None
-                    if 'unsigned' in event and 'prev_content' in event['unsigned']:
-                        prev = event['unsigned']['prev_content']
-                        if prev['membership'] == 'join':
-                            if 'displayname' in prev and prev['displayname']:
-                                oldname = prev['displayname']
-
-                            msg = '> {} changed their display name to {}'\
-                                  .format(oldname, displayname)
-                    else:
-                        msg = '> {} has joined the room'.format(displayname)
-
-                    if msg:
-                        response = await group.send_text(msg)
-                elif content['membership'] == 'leave':
-                    msg = '< {} has left the room'.format(displayname)
-                    response = await group.send_text(msg)
-                elif content['membership'] == 'ban':
-                    msg = '<! {} was banned from the room'.format(displayname)
-                    response = await group.send_text(msg)
-
-            if response:
-                message = db.Message(
-                    response['result']['chat']['id'],
-                    response['result']['message_id'],
-                    event['room_id'],
-                    event['event_id'],
-                    displayname)
-                db.session.add(message)
-
-        except RuntimeError as e:
-            print('Got a runtime error:', e)
-            print('Group:', group)
-
-    db.session.commit()
     return create_response(200, {})
 
 
-async def _matrix_request(method_fun, category, path, user_id, data=None,
-                          content_type=None):
-    # pylint: disable=too-many-arguments
-    # Due to this being a helper function, the argument count acceptable
+async def _matrix_request(method_fun, category, path, user_id, data=None, content_type=None):
+    """
+    Sends a request of type method_fun to the Matrix homeserver. Used as a
+    helper function for the matrix_post, matrix_put, matrix_get and
+    matrix_delete functions.
+    """
+
     if content_type is None:
         content_type = 'application/octet-stream'
-    if data is not None:
-        if isinstance(data, dict):
-            data = json.dumps(data)
-            content_type = 'application/json; charset=utf-8'
+
+    if data is not None and isinstance(data, dict):
+        data = json.dumps(data)
+        content_type = 'application/json; charset=utf-8'
 
     params = {'access_token': AS_TOKEN}
     if user_id is not None:
         params['user_id'] = user_id
 
-    async with method_fun('{}_matrix/{}/r0/{}'
-                          .format(MATRIX_HOST, quote(category), quote(path)),
-                          params=params, data=data,
-                          headers={'Content-Type': content_type}) as response:
-        if response.headers['Content-Type'].split(';')[0] \
-                == 'application/json':
+    async with method_fun('{}_matrix/{}/r0/{}'.format(MATRIX_HOST, quote(category), quote(path)),
+                          params=params, data=data, headers={'Content-Type': content_type}) as response:
+        if response.headers['Content-Type'].split(';')[0] == 'application/json':
             return await response.json()
         else:
             return await response.read()
 
 
 def matrix_post(category, path, user_id, data, content_type=None):
+    """Sends a POST request to the Matrix homeserver."""
     return _matrix_request(MATRIX_SESS.post, category, path, user_id, data,
                            content_type)
 
 
 def matrix_put(category, path, user_id, data, content_type=None):
+    """Sends a PUT request to the Matrix homeserver."""
     return _matrix_request(MATRIX_SESS.put, category, path, user_id, data,
                            content_type)
 
 
 def matrix_get(category, path, user_id):
+    """Sends a GET request to the Matrix homeserver."""
     return _matrix_request(MATRIX_SESS.get, category, path, user_id)
 
 
 def matrix_delete(category, path, user_id):
+    """Sends a DELETE request to the Matrix homeserver."""
     return _matrix_request(MATRIX_SESS.delete, category, path, user_id)
 
 
 async def matrix_room(request):
+    """Handles the room request from the Matrix homeserver."""
+
     room_alias = request.match_info['room_alias']
     args = parse_qs(urlparse(request.path_qs).query)
     print('Checking for {} | {}'.format(unquote(room_alias),
@@ -382,9 +429,7 @@ async def matrix_room(request):
         if args['access_token'][0] != HS_TOKEN:
             return create_response(403, {'errcode': 'M_FORBIDDEN'})
     except KeyError:
-        return create_response(401,
-                               {'errcode':
-                                'NL.SIJMENSCHOON.TELEMATRIX_UNAUTHORIZED'})
+        return create_response(401, {'errcode': 'NL.SIJMENSCHOON.TELEMATRIX_UNAUTHORIZED'})
 
     localpart = room_alias.split(':')[0]
     chat = '_'.join(localpart.split('_')[1:])
@@ -392,20 +437,27 @@ async def matrix_room(request):
     # Look up the chat in the database
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat).first()
     if link:
-        await matrix_post('client', 'createRoom', None,
-                          {'room_alias_name': localpart[1:]})
-        return create_response(200, {})
+        await matrix_post('client', 'createRoom', None, {'room_alias_name': localpart[1:]})
+        response = create_response(200, {})
     else:
-        return create_response(404, {'errcode':
-                                     'NL.SIJMENSCHOON.TELEMATRIX_NOT_FOUND'})
+        response = create_response(404, {'errcode': 'NL.SIJMENSCHOON.TELEMATRIX_NOT_FOUND'})
+
+    return response
 
 
 def send_matrix_message(room_id, user_id, txn_id, **kwargs):
+    """Sends a message to a Matrix room as user_id."""
+
     url = 'rooms/{}/send/m.room.message/{}'.format(room_id, txn_id)
     return matrix_put('client', url, user_id, kwargs)
 
 
 async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_to=None):
+    """
+    Downloads a file from Telegram by its file_id and uploads it to Matrix,
+    optionally converting it to another image format.
+    """
+
     file_path = (await TG_BOT.get_file(file_id))['file_path']
     request = await TG_BOT.download_file(file_path)
     data = await request.read()
@@ -428,6 +480,11 @@ async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_t
 
 
 async def register_join_matrix(chat, room_id, user_id):
+    """
+    Registers a bridged Telegram user on the homeserver and joins the linked
+    room.
+    """
+
     name = chat.sender['first_name']
     if 'last_name' in chat.sender:
         name += ' ' + chat.sender['last_name']
@@ -450,20 +507,25 @@ async def register_join_matrix(chat, room_id, user_id):
                      user_id, {'displayname': name})
     await matrix_post('client', 'join/{}'.format(room_id), user_id, {})
 
+
 async def update_matrix_displayname_avatar(tg_user):
+    """
+    Updates the Matrix display name and avatar to the ones used by a Telegram 
+    user.
+    """
+
     name = tg_user['first_name']
     if 'last_name' in tg_user:
         name += ' ' + tg_user['last_name']
     name += ' (Telegram)'
     user_id = USER_ID_FORMAT.format(tg_user['id'])
-    
+
     db_user = db.session.query(db.TgUser).filter_by(tg_id=tg_user['id']).first()
 
     profile_photos = await TG_BOT.get_user_profile_photos(tg_user['id'])
-    pp_file_id = None
     try:
         pp_file_id = profile_photos['result']['photos'][0][-1]['file_id']
-    except:
+    except KeyError:
         pp_file_id = None
 
     if db_user:
@@ -487,16 +549,21 @@ async def update_matrix_displayname_avatar(tg_user):
             await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':None})
         db.session.add(db_user)
     db.session.commit()
-        
+
 
 @TG_BOT.handle('sticker')
 async def aiotg_sticker(chat, sticker):
+    """
+    Receives a sticker from a Telegram group and sends it to the linked Matrix
+    room as an image.
+    """
+
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
 
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
@@ -527,24 +594,28 @@ async def aiotg_sticker(chat, sticker):
             name = chat.sender['first_name']
             if 'last_name' in chat.sender:
                 name += " " + chat.sender['last_name']
+
             name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
+            message = db.Message(chat.message['chat']['id'], chat.message['message_id'],
+                                 room_id, j['event_id'], name)
+
             db.session.add(message)
             db.session.commit()
 
+
 @TG_BOT.handle('photo')
 async def aiotg_photo(chat, photo):
+    """
+    Receives a photo from a Telegram group and sends it to the linked Matrix 
+    room.
+    """
+
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -574,24 +645,28 @@ async def aiotg_photo(chat, photo):
             name = chat.sender['first_name']
             if 'last_name' in chat.sender:
                 name += " " + chat.sender['last_name']
+
             name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
+            message = db.Message(chat.message['chat']['id'], chat.message['message_id'],
+                                 room_id, j['event_id'], name)
+
             db.session.add(message)
             db.session.commit()
 
+
 @TG_BOT.command(r'/alias')
-async def aiotg_alias(chat, match):
+async def aiotg_alias(chat, _):
+    """Handles the alias command from Telegram"""
     await chat.reply('The Matrix alias for this chat is #telegram_{}:{}'
                      .format(chat.id, MATRIX_HOST_BARE))
 
 
 @TG_BOT.command(r'(?s)(.*)')
 async def aiotg_message(chat, match):
+    """
+    Receives a message from the Telegram group and bridges it to the linked 
+    Matrix room.
+    """
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if link:
         room_id = link.matrix_room
@@ -599,7 +674,7 @@ async def aiotg_message(chat, match):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}:{}'.format(chat.message['message_id'], chat.id))
 
@@ -631,16 +706,16 @@ async def aiotg_message(chat, match):
         re_msg = chat.message['reply_to_message']
         if not 'text' in re_msg and not 'photo' in re_msg and not 'sticker' in re_msg:
             return
-        if 'last_name' in re_msg['from']:
-            msg_from = '{} {} (Telegram)'.format(re_msg['from']['first_name'],
-                                                 re_msg['from']['last_name'])
+
+        msg_from = re_msg['from']
+        if 'last_name' in msg_from:
+            msg_from = f'{msg_from["first_name"]} {msg_from["last_name"]} (Telegram)'
         else:
-            msg_from = '{} (Telegram)'.format(re_msg['from']['first_name'])
-        date = datetime.fromtimestamp(re_msg['date']) \
-               .strftime('%Y-%m-%d %H:%M:%S')
+            msg_from = f'{msg_from["first_name"]} (Telegram)'
 
         reply_mx_id = db.session.query(db.Message)\
-                .filter_by(tg_group_id=chat.message['chat']['id'], tg_message_id=chat.message['reply_to_message']['message_id']).first()
+                .filter_by(tg_group_id=chat.message['chat']['id'],
+                           tg_message_id=chat.message['reply_to_message']['message_id']).first()
 
         html_message = html.escape(message).replace('\n', '<br />')
         if 'text' in re_msg:
@@ -657,8 +732,8 @@ async def aiotg_message(chat, match):
             quoted_msg = 'Reply to {}:\n{}\n\n{}' \
                          .format(reply_mx_id.displayname, quoted_msg, message)
             quoted_html = '<i><a href="https://matrix.to/#/{}/{}">Reply to {}</a>:</i><br />{}<p>{}</p>' \
-                          .format(html.escape(room_id), html.escape(reply_mx_id.matrix_event_id), html.escape(reply_mx_id.displayname),
-                                  quoted_html, html_message)
+                          .format(html.escape(room_id), html.escape(reply_mx_id.matrix_event_id),
+                                  html.escape(reply_mx_id.displayname), quoted_html, html_message)
         else:
             quoted_msg = 'Reply to {}:\n{}\n\n{}' \
                          .format(msg_from, quoted_msg, message)
@@ -684,13 +759,11 @@ async def aiotg_message(chat, match):
         name = chat.sender['first_name']
         if 'last_name' in chat.sender:
             name += " " + chat.sender['last_name']
+
         name += " (Telegram)"
-        message = db.Message(
-                chat.message['chat']['id'],
-                chat.message['message_id'],
-                room_id,
-                j['event_id'],
-                name)
+        message = db.Message(chat.message['chat']['id'], chat.message['message_id'],
+                             room_id, j['event_id'], name)
+
         db.session.add(message)
         db.session.commit()
 
