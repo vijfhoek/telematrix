@@ -44,6 +44,7 @@ try:
         USER_ID_FORMAT = CONFIG['user_id_format']
         DATABASE_URL = CONFIG['db_url']
 
+        AS_PORT = CONFIG['as_port'] if 'as_port' in CONFIG else 5000
 except (OSError, IOError) as exception:
     print('Error opening config file:')
     print(exception)
@@ -709,7 +710,7 @@ def main():
     app.router.add_route('GET', '/rooms/{room_alias}', matrix_room)
     app.router.add_route('PUT', '/transactions/{transaction}',
                          matrix_transaction)
-    web.run_app(app, port=5000)
+    web.run_app(app, port=AS_PORT)
 
 
 if __name__ == "__main__":

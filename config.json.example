@@ -13,6 +13,7 @@
     },
 
     "user_id_format": "@telegram_{}:DOMAIN.TLD",
-    "db_url": "sqlite:///database.db"
-}
+    "db_url": "sqlite:///database.db",
 
+    "as_port": 5000
+}
