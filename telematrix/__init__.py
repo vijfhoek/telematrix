@@ -292,14 +292,14 @@ async def matrix_transaction(request):
                     db.session.add(sender)
 
                     msg = None
-                    if 'unsigned' in event and 'prev_content' in event['unsigned']:
-                        prev = event['unsigned']['prev_content']
-                        if prev['membership'] == 'join':
-                            if 'displayname' in prev and prev['displayname']:
-                                oldname = prev['displayname']
-
-                            msg = '> {} changed their display name to {}'\
-                                  .format(oldname, displayname)
+                    print("DEBUG: {}".format(event))
+                    if ('unsigned' in event and 'prev_content' in event['unsigned']) or 'prev_content' in event:
+                        if 'unsigned' in event and 'prev_content' in event['unsigned']:
+                            prev = event['unsigned']['prev_content']
+                        elif 'prev_content' in event:
+                            prev = event['prev_content']
+                        if event['content']['displayname'] != prev['displayname']:
+                            msg = '> {} changed their display name to {}'.format(prev['displayname'], event['content']['displayname'])
                     else:
                         msg = '> {} has joined the room'.format(displayname)
 
