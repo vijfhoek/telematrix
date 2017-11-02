@@ -122,9 +122,6 @@ Session.vim
 tags
 
 
-#VSCode
-.vscode
-
 ### macOS ###
 *.DS_Store
 .AppleDouble
