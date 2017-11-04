@@ -12,6 +12,7 @@ from datetime import datetime
 from time import time
 from urllib.parse import unquote, quote, urlparse, parse_qs
 from io import BytesIO
+import re
 
 from PIL import Image
 from aiohttp import web, ClientSession
@@ -82,26 +83,26 @@ def sanitize_html(string):
     soup = BeautifulSoup(string, 'html.parser')
     for tag in soup.find_all(True):
         if tag.name == 'blockquote':
-            tag.string = ('\n' + tag.text).replace('\n', '\n> ').rstrip('\n>')
+            tag.string = ('\n' + tag.text).replace('\n', '\n> ')[3:-3]
         if tag.name not in VALID_TAGS:
             tag.hidden = True
     return soup.renderContents().decode('utf-8')
 
 
-def format_matrix_msg(form, username, content):
+def format_matrix_msg(form, content):
     """
     Formats a matrix message for sending to Telegram
     :param form: The format string of the message, where the first parameter
                  is the username and the second one the message.
-    :param username: The username of the user.
     :param content: The content to be sent.
     :return: The formatted string.
     """
     if 'format' in content and content['format'] == 'org.matrix.custom.html':
-        sanitized = sanitize_html(content['formatted_body'])
-        return html.escape(form).format(username, sanitized), 'HTML'
+        sanitized = re.sub("<a href=\\\"https://matrix.to/#/@telegram_([0-9]+):{}\\\">(.+?) \(Telegram\)</a>".format(MATRIX_HOST_BARE), "<a href=\"tg://user?id=\\1\">\\2</a>", content['formatted_body'])
+        sanitized = sanitize_html(sanitized)
+        return html.escape(form).format(sanitized), 'HTML'
     else:
-        return form.format(username, content['body']), None
+        return form.format(html.escape(content['body'])), None
 
 
 async def download_matrix_file(url, filename):
@@ -229,14 +230,14 @@ async def matrix_transaction(request):
                     continue
 
                 if content['msgtype'] == 'm.text':
-                    msg, mode = format_matrix_msg('<{}> {}', displayname, content)
-                    response = await group.send_text(msg, parse_mode=mode)
+                    msg, mode = format_matrix_msg('{}', content)
+                    response = await group.send_text("<b>{}:</b> {}".format(displayname, msg), parse_mode='HTML')
                 elif content['msgtype'] == 'm.notice':
-                    msg, mode = format_matrix_msg('[{}] {}', displayname, content)
-                    response = await group.send_text(msg, parse_mode=mode)
+                    msg, mode = format_matrix_msg('{}', content)
+                    response = await group.send_text("[{}] {}".format(displayname, msg), parse_mode=mode)
                 elif content['msgtype'] == 'm.emote':
-                    msg, mode = format_matrix_msg('* {} {}', displayname, content)
-                    response = await group.send_text(msg, parse_mode=mode)
+                    msg, mode = format_matrix_msg('{}', content)
+                    response = await group.send_text("* {} {}".format(displayname, msg), parse_mode=mode)
                 elif content['msgtype'] == 'm.image':
                     try:
                         url = urlparse(content['url'])
@@ -255,8 +256,7 @@ async def matrix_transaction(request):
                                       .format(url.netloc, quote(url.path))
                             url_str = await shorten_url(url_str)
 
-                            caption = '<{}> {} ({})'.format(displayname,
-                                                            content['body'], url_str)
+                            caption = '{} sent an image'.format(displayname)
                             response = await group.send_photo(img_file, caption=caption)
                     except:
                         pass
