@@ -449,7 +449,10 @@ async def register_join_matrix(chat, room_id, user_id):
 
     await matrix_put('client', 'profile/{}/displayname'.format(user_id),
                      user_id, {'displayname': name})
-    await matrix_post('client', 'join/{}'.format(room_id), user_id, {})
+    j = await matrix_post('client', 'join/{}'.format(room_id), user_id, {})
+    if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
+        print("Error with <{}> joining room <{}>. This is likely because guests are not allowed to join the room."
+              .format(user_id, room_id))
 
 async def update_matrix_displayname_avatar(tg_user):
     name = tg_user['first_name']
