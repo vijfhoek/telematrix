@@ -44,6 +44,7 @@ try:
 
         USER_ID_FORMAT = CONFIG['user_id_format']
         DATABASE_URL = CONFIG['db_url']
+        HIDE_MEMBERSHIP_CHANGES = CONFIG['hide_membership_changes']
 
         AS_PORT = CONFIG['as_port'] if 'as_port' in CONFIG else 5000
 except (OSError, IOError) as exception:
@@ -209,7 +210,6 @@ async def matrix_transaction(request):
                 if matrix_is_telegram(user_id):
                     continue
 
-
                 sender = db.session.query(db.MatrixUser)\
                            .filter_by(matrix_id=user_id).first()
 
@@ -265,6 +265,8 @@ async def matrix_transaction(request):
                     print(json.dumps(content, indent=4))
 
             elif event['type'] == 'm.room.member':
+                if HIDE_MEMBERSHIP_CHANGES:
+                    continue
                 if matrix_is_telegram(event['state_key']):
                     continue
 
@@ -537,6 +539,7 @@ async def aiotg_sticker(chat, sticker):
                     name)
             db.session.add(message)
             db.session.commit()
+
 
 @TG_BOT.handle('photo')
 async def aiotg_photo(chat, photo):
