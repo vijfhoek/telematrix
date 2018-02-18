@@ -23,7 +23,7 @@ import telematrix.database as db
 
 # Read the configuration file
 try:
-    with open('config.json.example', 'r') as config_file:
+    with open('config.json', 'r') as config_file:
         CONFIG = json.load(config_file)
 
         HS_TOKEN = CONFIG['tokens']['hs']
