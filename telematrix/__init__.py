@@ -268,13 +268,13 @@ async def matrix_transaction(request):
                                 caption = '{} sent an image'.format(displayname)
                                 response = await group.send_photo(file, caption=caption)
                             elif content['msgtype'] == 'm.video':
-                                caption = '{} sent an video'.format(displayname)
+                                caption = '{} sent a video'.format(displayname)
                                 response = await group.send_video(file, caption=caption)
                             elif content['msgtype'] == 'm.audio':
                                 caption = '{} sent an audio file'.format(displayname)
                                 response = await group.send_audio(file, caption=caption)
                             elif content['msgtype'] == 'm.file':
-                                caption = '{} sent an file'.format(displayname)
+                                caption = '{} sent a file'.format(displayname)
                                 response = await group.send_document(file, caption=caption)
                     except:
                         pass
@@ -470,6 +470,7 @@ async def register_join_matrix(chat, room_id, user_id):
     await matrix_put('client', 'profile/{}/displayname'.format(user_id),
                      user_id, {'displayname': name})
     await matrix_post('client', 'join/{}'.format(room_id), user_id, {})
+
 
 async def update_matrix_displayname_avatar(tg_user):
     name = tg_user['first_name']
