@@ -23,7 +23,7 @@ import telematrix.database as db
 
 # Read the configuration file
 try:
-    with open('config.json', 'r') as config_file:
+    with open('config.json.example', 'r') as config_file:
         CONFIG = json.load(config_file)
 
         HS_TOKEN = CONFIG['tokens']['hs']
@@ -154,7 +154,12 @@ mime_extensions = {
     'image/tiff': 'tif',
     'image/x-tiff': 'tif',
     'image/bmp': 'bmp',
-    'image/x-windows-bmp': 'bmp'
+    'image/x-windows-bmp': 'bmp',
+    'video/avi': 'avi',
+    'msvideo/avi': 'avi',
+    'x-msvideo/avi': 'avi',
+    'video/mp4': 'mp4',
+    'x-video/mp4': 'mp4',
 }
 
 async def matrix_transaction(request):
@@ -238,26 +243,39 @@ async def matrix_transaction(request):
                 elif content['msgtype'] == 'm.emote':
                     msg, mode = format_matrix_msg('{}', content)
                     response = await group.send_text("* {} {}".format(displayname, msg), parse_mode=mode)
-                elif content['msgtype'] == 'm.image':
+                elif content['msgtype'] in ['m.image', 'm.video', 'm.video', 'm.file']:
                     try:
                         url = urlparse(content['url'])
 
                         # Append the correct extension if it's missing or wrong
-                        ext = mime_extensions[content['info']['mimetype']]
+                        try:
+                            ext = mime_extensions[content['info']['mimetype']]
+                        except KeyError:
+                            ext = ""
                         if not content['body'].endswith(ext):
                             content['body'] += '.' + ext
 
                         # Download the file
                         await download_matrix_file(url, content['body'])
-                        with open('/tmp/{}'.format(content['body']), 'rb') as img_file:
+                        with open('/tmp/{}'.format(content['body']), 'rb') as file:
                             # Create the URL and shorten it
                             url_str = MATRIX_HOST_EXT + \
                                       '_matrix/media/r0/download/{}{}' \
                                       .format(url.netloc, quote(url.path))
                             url_str = await shorten_url(url_str)
 
-                            caption = '{} sent an image'.format(displayname)
-                            response = await group.send_photo(img_file, caption=caption)
+                            if content['msgtype'] == 'm.image':
+                                caption = '{} sent an image'.format(displayname)
+                                response = await group.send_photo(file, caption=caption)
+                            elif content['msgtype'] == 'm.video':
+                                caption = '{} sent an video'.format(displayname)
+                                response = await group.send_video(file, caption=caption)
+                            elif content['msgtype'] == 'm.audio':
+                                caption = '{} sent an audio file'.format(displayname)
+                                response = await group.send_audio(file, caption=caption)
+                            elif content['msgtype'] == 'm.file':
+                                caption = '{} sent an file'.format(displayname)
+                                response = await group.send_document(file, caption=caption)
                     except:
                         pass
                 else:
