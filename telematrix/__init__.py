@@ -609,7 +609,7 @@ async def aiotg_photo(chat, photo):
 
 
 @TG_BOT.handle('video')
-async def aiotg_photo(chat, video):
+async def aiotg_video(chat, video):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
@@ -624,7 +624,7 @@ async def aiotg_photo(chat, video):
     uri, length = await upload_tgfile_to_matrix(file_id, user_id)
     info = {'mimetype': 'video/mp4', 'size': length, 'h': video[-1]['height'],
             'w': video[-1]['width']}
-    body = 'Image_{}.jpg'.format(int(time() * 1000))
+    body = 'Video_{}.mp4'.format(int(time() * 1000))
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
