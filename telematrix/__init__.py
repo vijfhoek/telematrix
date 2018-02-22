@@ -627,7 +627,7 @@ async def aiotg_audio(chat, audio):
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.video')
+                                      url=uri, info=info, msgtype='m.audio')
 
         if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
             await register_join_matrix(chat, room_id, user_id)
