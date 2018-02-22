@@ -243,7 +243,7 @@ async def matrix_transaction(request):
                 elif content['msgtype'] == 'm.emote':
                     msg, mode = format_matrix_msg('{}', content)
                     response = await group.send_text("* {} {}".format(displayname, msg), parse_mode=mode)
-                elif content['msgtype'] in ['m.image', 'm.video', 'm.video', 'm.file']:
+                elif content['msgtype'] in ['m.image', 'm.audio', 'm.video', 'm.file']:
                     try:
                         url = urlparse(content['url'])
 
