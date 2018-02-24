@@ -685,8 +685,12 @@ async def aiotg_video(chat, video):
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
 
-    file_id = video[-1]['file_id']
-    uri, length = await upload_tgfile_to_matrix(file_id, user_id)
+    file_id = video['file_id']
+    try:
+        mime = video['mime_type']
+    except KeyError:
+        mime = 'video/mp4'
+    uri, length = await upload_tgfile_to_matrix(file_id, user_id, mime)
     info = {'mimetype': 'video/mp4', 'size': length, 'h': video['height'],
             'w': video['width']}
     body = 'Video_{}.mp4'.format(int(time() * 1000))
