@@ -675,6 +675,7 @@ async def aiotg_audio(chat, audio):
 
 @TG_BOT.handle('video')
 async def aiotg_video(chat, video):
+    print(video)
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
@@ -691,7 +692,7 @@ async def aiotg_video(chat, video):
     except KeyError:
         mime = 'video/mp4'
     uri, length = await upload_tgfile_to_matrix(file_id, user_id, mime)
-    info = {'mimetype': 'video/mp4', 'size': length, 'h': video['height'],
+    info = {'mimetype': mime, 'size': length, 'h': video['height'],
             'w': video['width']}
     body = 'Video_{}.mp4'.format(int(time() * 1000))
 
