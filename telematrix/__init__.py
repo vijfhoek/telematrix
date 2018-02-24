@@ -448,6 +448,22 @@ async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_t
         return None, 0
 
 
+async def upload_audiofile_to_matrix(file_id, user_id, mime='audio/mpeg'):
+    file_path = (await TG_BOT.get_file(file_id))['file_path']
+    print(file_path)
+    request = await TG_BOT.download_file(file_path)
+    data = await request.read()
+    print(data)
+
+    j = await matrix_post('media', 'upload', user_id, data, mime)
+    length = len(data)
+
+    if 'content_uri' in j:
+        return j['content_uri'], length
+    else:
+        return None, 0
+
+
 async def register_join_matrix(chat, room_id, user_id):
     name = chat.sender['first_name']
     if 'last_name' in chat.sender:
@@ -610,6 +626,7 @@ async def aiotg_photo(chat, photo):
 
 @TG_BOT.handle('audio')
 async def aiotg_audio(chat, audio):
+    print(audio)
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
@@ -621,8 +638,12 @@ async def aiotg_audio(chat, audio):
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
 
     file_id = audio['file_id']
-    uri, length = await upload_tgfile_to_matrix(file_id, user_id)
-    info = {'mimetype': 'audio/mp3', 'size': length}
+    try:
+        mime = audio['mime_type']
+    except KeyError:
+        mime = 'audio/mp3'
+    uri, length = await upload_audiofile_to_matrix(file_id, user_id, mime)
+    info = {'mimetype': mime, 'size': length}
     body = 'Audio_{}.mp3'.format(int(time() * 1000))
 
     if uri:
