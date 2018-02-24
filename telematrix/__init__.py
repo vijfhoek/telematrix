@@ -450,10 +450,8 @@ async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_t
 
 async def upload_audiofile_to_matrix(file_id, user_id, mime='audio/mpeg'):
     file_path = (await TG_BOT.get_file(file_id))['file_path']
-    print(file_path)
     request = await TG_BOT.download_file(file_path)
     data = await request.read()
-    print(data)
 
     j = await matrix_post('media', 'upload', user_id, data, mime)
     length = len(data)
@@ -626,7 +624,6 @@ async def aiotg_photo(chat, photo):
 
 @TG_BOT.handle('audio')
 async def aiotg_audio(chat, audio):
-    print(audio)
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
