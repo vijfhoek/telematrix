@@ -532,7 +532,7 @@ async def aiotg_sticker(chat, sticker):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
 
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
@@ -581,7 +581,7 @@ async def aiotg_photo(chat, photo):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -629,7 +629,7 @@ async def aiotg_audio(chat, audio):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -673,15 +673,65 @@ async def aiotg_audio(chat, audio):
             db.session.commit()
 
 
-@TG_BOT.handle('video')
-async def aiotg_video(chat, video):
-    print(video)
+@TG_BOT.handle('document')
+async def aiotg_audio(chat, document):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender);
+    await update_matrix_displayname_avatar(chat.sender)
+    room_id = link.matrix_room
+    user_id = USER_ID_FORMAT.format(chat.sender['id'])
+    txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
+
+    file_id = document['file_id']
+    try:
+        mime = document['mime_type']
+    except KeyError:
+        mime = ''
+    uri, length = await upload_audiofile_to_matrix(file_id, user_id, mime)
+    info = {'mimetype': mime, 'size': length}
+    body = 'Document_{}'.format(int(time() * 1000))
+
+    if uri:
+        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
+                                      url=uri, info=info, msgtype='m.document')
+
+        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
+            await register_join_matrix(chat, room_id, user_id)
+            await send_matrix_message(room_id, user_id, txn_id + 'join',
+                                      body=body, url=uri, info=info,
+                                      msgtype='m.document')
+
+        if 'caption' in chat.message:
+            await send_matrix_message(room_id, user_id, txn_id + 'caption',
+                                      body=chat.message['caption'],
+                                      msgtype='m.text')
+
+        if 'event_id' in j:
+            name = chat.sender['first_name']
+            if 'last_name' in chat.sender:
+                name += " " + chat.sender['last_name']
+            name += " (Telegram)"
+            message = db.Message(
+                    chat.message['chat']['id'],
+                    chat.message['message_id'],
+                    room_id,
+                    j['event_id'],
+                    name)
+            db.session.add(message)
+            db.session.commit()
+
+
+@TG_BOT.handle('video')
+async def aiotg_video(chat, video):
+    link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
+    if not link:
+        print('Unknown telegram chat {}: {}'.format(chat, chat.id))
+        return
+
+    await update_matrix_displayname_avatar(chat.sender)
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
