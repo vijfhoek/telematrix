@@ -674,7 +674,7 @@ async def aiotg_audio(chat, audio):
 
 
 @TG_BOT.handle('document')
-async def aiotg_audio(chat, document):
+async def aiotg_document(chat, document):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
@@ -885,6 +885,7 @@ async def aiotg_message(chat, match):
                 name)
         db.session.add(message)
         db.session.commit()
+
 
 
 def main():
