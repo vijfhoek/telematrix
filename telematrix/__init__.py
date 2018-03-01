@@ -581,7 +581,7 @@ async def aiotg_photo(chat, photo):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender)
+    await update_matrix_displayname_avatar(chat.sender);
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -629,7 +629,7 @@ async def aiotg_audio(chat, audio):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender)
+    await update_matrix_displayname_avatar(chat.sender);
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -674,13 +674,13 @@ async def aiotg_audio(chat, audio):
 
 
 @TG_BOT.handle('document')
-async def aiotg_document(chat, document):
+async def aiotg_document    (chat, document):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender)
+    await update_matrix_displayname_avatar(chat.sender);
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
@@ -731,7 +731,7 @@ async def aiotg_video(chat, video):
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
         return
 
-    await update_matrix_displayname_avatar(chat.sender)
+    await update_matrix_displayname_avatar(chat.sender);
     room_id = link.matrix_room
     user_id = USER_ID_FORMAT.format(chat.sender['id'])
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
