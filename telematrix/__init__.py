@@ -23,7 +23,7 @@ import telematrix.database as db
 
 # Read the configuration file
 try:
-    with open('config.json', 'r') as config_file:
+    with open('config.json.example', 'r') as config_file:
         CONFIG = json.load(config_file)
 
         HS_TOKEN = CONFIG['tokens']['hs']
@@ -674,7 +674,7 @@ async def aiotg_audio(chat, audio):
 
 
 @TG_BOT.handle('document')
-async def aiotg_document    (chat, document):
+async def aiotg_document(chat, document):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
     if not link:
         print('Unknown telegram chat {}: {}'.format(chat, chat.id))
@@ -887,6 +887,10 @@ async def aiotg_message(chat, match):
         db.session.commit()
 
 
+@TG_BOT.command(r'(.*)')
+def test(chat, match):
+    print(match)
+
 
 def main():
     """
@@ -894,6 +898,7 @@ def main():
     """
     logging.basicConfig(level=logging.WARNING)
     db.initialize(DATABASE_URL)
+    print(TG_BOT._handlers)
 
     loop = asyncio.get_event_loop()
     asyncio.ensure_future(TG_BOT.loop())
