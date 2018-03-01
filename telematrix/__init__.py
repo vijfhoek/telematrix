@@ -696,13 +696,13 @@ async def aiotg_document    (chat, document):
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.document')
+                                      url=uri, info=info, msgtype='m.file')
 
         if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
             await register_join_matrix(chat, room_id, user_id)
             await send_matrix_message(room_id, user_id, txn_id + 'join',
                                       body=body, url=uri, info=info,
-                                      msgtype='m.document')
+                                      msgtype='m.file')
 
         if 'caption' in chat.message:
             await send_matrix_message(room_id, user_id, txn_id + 'caption',
