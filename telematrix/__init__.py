@@ -142,12 +142,15 @@ async def shorten_url(url):
     else:
         return url
 
+
 def matrix_is_telegram(user_id):
     username = user_id.split(':')[0][1:]
     return username.startswith('telegram_')
 
+
 def get_username(user_id):
     return user_id.split(':')[0][1:]
+
 
 mime_extensions = {
     'image/jpeg': 'jpg',
@@ -163,6 +166,7 @@ mime_extensions = {
     'video/mp4': 'mp4',
     'x-video/mp4': 'mp4',
 }
+
 
 async def matrix_transaction(request):
     """
@@ -529,9 +533,12 @@ async def update_matrix_displayname_avatar(tg_user):
 
 def create_file_name(obj_type, mime):
     try:
-        ext = MT.types_map_inv[mime][0]
+        ext = MT.types_map_inv[1][mime][0]
     except KeyError:
-        ext = ''
+        try:
+            ext = MT.types_map_inv[0][mime][0]
+        except KeyError:
+            ext = ''
     name = '{}_{}.{}'.format(obj_type, int(time() * 1000), ext)
     return name
 
