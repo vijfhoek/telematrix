@@ -271,8 +271,12 @@ async def matrix_transaction(request):
                             url_str = await shorten_url(url_str)
 
                             if content['msgtype'] == 'm.image':
-                                caption = '{} sent an image'.format(displayname)
-                                response = await group.send_photo(file, caption=caption)
+                                if content['info']['mimetype'] == 'image/gif':
+                                    caption = '{} sent a gif'.format(displayname)
+                                    response = await group.send_video(file, caption=caption)
+                                else:
+                                    caption = '{} sent an image'.format(displayname)
+                                    response = await group.send_photo(file, caption=caption)
                             elif content['msgtype'] == 'm.video':
                                 caption = '{} sent a video'.format(displayname)
                                 response = await group.send_video(file, caption=caption)
