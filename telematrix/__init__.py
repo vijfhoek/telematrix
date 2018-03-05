@@ -804,16 +804,11 @@ async def aiotg_message(chat, match):
         db.session.commit()
 
 
-@TG_BOT.command(r'(.*)')
-def test(chat, match):
-    print(match)
-
-
 def main():
     """
     Main function to get the entire ball rolling.
     """
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
     db.initialize(DATABASE_URL)
     print(TG_BOT._handlers)
 
