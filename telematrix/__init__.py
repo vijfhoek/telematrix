@@ -454,7 +454,7 @@ async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_t
         return None, 0
 
 
-async def upload_audiofile_to_matrix(file_id, user_id, mime='audio/mpeg'):
+async def upload_file_to_matrix(file_id, user_id, mime):
     file_path = (await TG_BOT.get_file(file_id))['file_path']
     request = await TG_BOT.download_file(file_path)
     data = await request.read()
@@ -539,8 +539,38 @@ def create_file_name(obj_type, mime):
             ext = MT.types_map_inv[0][mime][0]
         except KeyError:
             ext = ''
-    name = '{}_{}.{}'.format(obj_type, int(time() * 1000), ext)
+    name = '{}_{}{}'.format(obj_type, int(time() * 1000), ext)
     return name
+
+
+async def send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, msgtype):
+    j = await send_matrix_message(room_id, user_id, txn_id, body=body,
+                        url=uri, info=info, msgtype=msgtype)
+
+    if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
+        await register_join_matrix(chat, room_id, user_id)
+        await send_matrix_message(room_id, user_id, txn_id + 'join',
+                            body=body, url=uri, info=info,
+                            msgtype=msgtype)
+
+    if 'caption' in chat.message:
+        await send_matrix_message(room_id, user_id, txn_id + 'caption',
+                            body=chat.message['caption'],
+                            msgtype='m.text')
+
+    if 'event_id' in j:
+        name = chat.sender['first_name']
+        if 'last_name' in chat.sender:
+            name += " " + chat.sender['last_name']
+        name += " (Telegram)"
+        message = db.Message(
+            chat.message['chat']['id'],
+            chat.message['message_id'],
+            room_id,
+            j['event_id'],
+            name)
+        db.session.add(message)
+        db.session.commit()
 
 @TG_BOT.handle('sticker')
 async def aiotg_sticker(chat, sticker):
@@ -563,32 +593,7 @@ async def aiotg_sticker(chat, sticker):
     body = 'Sticker_{}.png'.format(int(time() * 1000))
 
     if uri:
-        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.image')
-
-        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
-            await register_join_matrix(chat, room_id, user_id)
-            await send_matrix_message(room_id, user_id, txn_id + 'join',
-                                      body=body, url=uri, info=info,
-                                      msgtype='m.image')
-
-        if 'caption' in chat.message:
-            await send_matrix_message(room_id, user_id, txn_id + 'caption',
-                                      body=chat.message['caption'],
-                                      msgtype='m.text')
-        if 'event_id' in j:
-            name = chat.sender['first_name']
-            if 'last_name' in chat.sender:
-                name += " " + chat.sender['last_name']
-            name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
-            db.session.add(message)
-            db.session.commit()
+        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.image')
 
 
 @TG_BOT.handle('photo')
@@ -604,39 +609,14 @@ async def aiotg_photo(chat, photo):
     txn_id = quote('{}{}'.format(chat.message['message_id'], chat.id))
 
     file_id = photo[-1]['file_id']
+
     uri, length = await upload_tgfile_to_matrix(file_id, user_id)
     info = {'mimetype': 'image/jpeg', 'size': length, 'h': photo[-1]['height'],
             'w': photo[-1]['width']}
     body = 'Image_{}.jpg'.format(int(time() * 1000))
 
     if uri:
-        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.image')
-
-        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
-            await register_join_matrix(chat, room_id, user_id)
-            await send_matrix_message(room_id, user_id, txn_id + 'join',
-                                      body=body, url=uri, info=info,
-                                      msgtype='m.image')
-
-        if 'caption' in chat.message:
-            await send_matrix_message(room_id, user_id, txn_id + 'caption',
-                                      body=chat.message['caption'],
-                                      msgtype='m.text')
-
-        if 'event_id' in j:
-            name = chat.sender['first_name']
-            if 'last_name' in chat.sender:
-                name += " " + chat.sender['last_name']
-            name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
-            db.session.add(message)
-            db.session.commit()
+        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.image')
 
 
 @TG_BOT.handle('audio')
@@ -656,38 +636,12 @@ async def aiotg_audio(chat, audio):
         mime = audio['mime_type']
     except KeyError:
         mime = 'audio/mp3'
-    uri, length = await upload_audiofile_to_matrix(file_id, user_id, mime)
+    uri, length = await upload_file_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length}
     body = create_file_name('Audio', mime)
 
     if uri:
-        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.audio')
-
-        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
-            await register_join_matrix(chat, room_id, user_id)
-            await send_matrix_message(room_id, user_id, txn_id + 'join',
-                                      body=body, url=uri, info=info,
-                                      msgtype='m.audio')
-
-        if 'caption' in chat.message:
-            await send_matrix_message(room_id, user_id, txn_id + 'caption',
-                                      body=chat.message['caption'],
-                                      msgtype='m.text')
-
-        if 'event_id' in j:
-            name = chat.sender['first_name']
-            if 'last_name' in chat.sender:
-                name += " " + chat.sender['last_name']
-            name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
-            db.session.add(message)
-            db.session.commit()
+        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.audio')
 
 
 @TG_BOT.handle('document')
@@ -707,38 +661,12 @@ async def aiotg_document(chat, document):
         mime = document['mime_type']
     except KeyError:
         mime = ''
-    uri, length = await upload_audiofile_to_matrix(file_id, user_id, mime)
+    uri, length = await upload_file_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length}
     body = create_file_name('File', mime)
 
     if uri:
-        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.file')
-
-        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
-            await register_join_matrix(chat, room_id, user_id)
-            await send_matrix_message(room_id, user_id, txn_id + 'join',
-                                      body=body, url=uri, info=info,
-                                      msgtype='m.file')
-
-        if 'caption' in chat.message:
-            await send_matrix_message(room_id, user_id, txn_id + 'caption',
-                                      body=chat.message['caption'],
-                                      msgtype='m.text')
-
-        if 'event_id' in j:
-            name = chat.sender['first_name']
-            if 'last_name' in chat.sender:
-                name += " " + chat.sender['last_name']
-            name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
-            db.session.add(message)
-            db.session.commit()
+        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.file')
 
 
 @TG_BOT.handle('video')
@@ -758,39 +686,13 @@ async def aiotg_video(chat, video):
         mime = video['mime_type']
     except KeyError:
         mime = 'video/mp4'
-    uri, length = await upload_tgfile_to_matrix(file_id, user_id, mime)
+    uri, length = await upload_file_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length, 'h': video['height'],
             'w': video['width']}
     body = create_file_name('Video', mime)
 
     if uri:
-        j = await send_matrix_message(room_id, user_id, txn_id, body=body,
-                                      url=uri, info=info, msgtype='m.video')
-
-        if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
-            await register_join_matrix(chat, room_id, user_id)
-            await send_matrix_message(room_id, user_id, txn_id + 'join',
-                                      body=body, url=uri, info=info,
-                                      msgtype='m.video')
-
-        if 'caption' in chat.message:
-            await send_matrix_message(room_id, user_id, txn_id + 'caption',
-                                      body=chat.message['caption'],
-                                      msgtype='m.text')
-
-        if 'event_id' in j:
-            name = chat.sender['first_name']
-            if 'last_name' in chat.sender:
-                name += " " + chat.sender['last_name']
-            name += " (Telegram)"
-            message = db.Message(
-                    chat.message['chat']['id'],
-                    chat.message['message_id'],
-                    room_id,
-                    j['event_id'],
-                    name)
-            db.session.add(message)
-            db.session.commit()
+        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.video')
 
 
 @TG_BOT.command(r'/alias')
