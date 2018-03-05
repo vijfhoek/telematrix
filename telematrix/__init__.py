@@ -661,10 +661,21 @@ async def aiotg_document(chat, document):
         mime = ''
     uri, length = await upload_file_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length}
-    body = create_file_name('File', mime)
 
     if uri:
-        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.file')
+        if 'image' in mime:
+            msgtype = 'm.image'
+            body = create_file_name('Image', mime)
+        elif 'video' in mime:
+            msgtype = 'm.video'
+            body = create_file_name('Video', mime)
+        elif 'audio' in mime:
+            msgtype = 'm.audio'
+            body = create_file_name('Audio', mime)
+        else:
+            msgtype = 'm.file'
+            body = create_file_name('File', mime)
+        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, msgtype)
 
 
 @TG_BOT.handle('video')
