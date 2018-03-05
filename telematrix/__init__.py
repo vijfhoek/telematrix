@@ -270,21 +270,27 @@ async def matrix_transaction(request):
                                       .format(url.netloc, quote(url.path))
                             url_str = await shorten_url(url_str)
 
+
                             if content['msgtype'] == 'm.image':
                                 if content['info']['mimetype'] == 'image/gif':
                                     caption = '{} sent a gif'.format(displayname)
+                                    await group.send_chat_action('upload_video')
                                     response = await group.send_video(file, caption=caption)
                                 else:
                                     caption = '{} sent an image'.format(displayname)
+                                    await group.send_chat_action('upload_photo')
                                     response = await group.send_photo(file, caption=caption)
                             elif content['msgtype'] == 'm.video':
                                 caption = '{} sent a video'.format(displayname)
+                                await group.send_chat_action('upload_video')
                                 response = await group.send_video(file, caption=caption)
                             elif content['msgtype'] == 'm.audio':
                                 caption = '{} sent an audio file'.format(displayname)
+                                await group.send_chat_action('upload_audio')
                                 response = await group.send_audio(file, caption=caption)
                             elif content['msgtype'] == 'm.file':
                                 caption = '{} sent a file'.format(displayname)
+                                await group.send_chat_action('upload_document')
                                 response = await group.send_document(file, caption=caption)
                     except:
                         pass
