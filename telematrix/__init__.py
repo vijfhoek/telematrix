@@ -550,13 +550,11 @@ async def send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, m
     if 'errcode' in j and j['errcode'] == 'M_FORBIDDEN':
         await register_join_matrix(chat, room_id, user_id)
         await send_matrix_message(room_id, user_id, txn_id + 'join',
-                            body=body, url=uri, info=info,
-                            msgtype=msgtype)
+                                  body=body, url=uri, info=info, msgtype=msgtype)
 
     if 'caption' in chat.message:
         await send_matrix_message(room_id, user_id, txn_id + 'caption',
-                            body=chat.message['caption'],
-                            msgtype='m.text')
+                                  body=chat.message['caption'], msgtype='m.text')
 
     if 'event_id' in j:
         name = chat.sender['first_name']
@@ -593,7 +591,7 @@ async def aiotg_sticker(chat, sticker):
     body = 'Sticker_{}.png'.format(int(time() * 1000))
 
     if uri:
-        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.image')
+        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.image')
 
 
 @TG_BOT.handle('photo')
@@ -616,7 +614,7 @@ async def aiotg_photo(chat, photo):
     body = 'Image_{}.jpg'.format(int(time() * 1000))
 
     if uri:
-        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.image')
+        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.image')
 
 
 @TG_BOT.handle('audio')
@@ -641,7 +639,7 @@ async def aiotg_audio(chat, audio):
     body = create_file_name('Audio', mime)
 
     if uri:
-        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.audio')
+        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.audio')
 
 
 @TG_BOT.handle('document')
@@ -666,7 +664,7 @@ async def aiotg_document(chat, document):
     body = create_file_name('File', mime)
 
     if uri:
-        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.file')
+        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.file')
 
 
 @TG_BOT.handle('video')
@@ -692,7 +690,7 @@ async def aiotg_video(chat, video):
     body = create_file_name('Video', mime)
 
     if uri:
-        send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.video')
+        await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, 'm.video')
 
 
 @TG_BOT.command(r'/alias')
