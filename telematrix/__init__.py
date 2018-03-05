@@ -58,6 +58,8 @@ TG_BOT = Bot(api_token=TG_TOKEN)
 MATRIX_SESS = ClientSession()
 SHORTEN_SESS = ClientSession()
 
+MT = mimetypes.MimeTypes()
+
 
 def create_response(code, obj):
     """
@@ -523,7 +525,15 @@ async def update_matrix_displayname_avatar(tg_user):
             await matrix_put('client', 'profile/{}/avatar_url'.format(user_id), user_id, {'avatar_url':None})
         db.session.add(db_user)
     db.session.commit()
-        
+
+
+def create_file_name(obj_type, mime):
+    try:
+        ext = MT.types_map_inv[mime][0]
+    except KeyError:
+        ext = ''
+    name = '{}_{}.{}'.format(obj_type, int(time() * 1000), ext)
+    return name
 
 @TG_BOT.handle('sticker')
 async def aiotg_sticker(chat, sticker):
@@ -641,7 +651,7 @@ async def aiotg_audio(chat, audio):
         mime = 'audio/mp3'
     uri, length = await upload_audiofile_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length}
-    body = 'Audio_{}.mp3'.format(int(time() * 1000))
+    body = create_file_name('Audio', mime)
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
@@ -692,7 +702,7 @@ async def aiotg_document(chat, document):
         mime = ''
     uri, length = await upload_audiofile_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length}
-    body = 'Document_{}'.format(int(time() * 1000))
+    body = create_file_name('File', mime)
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
@@ -744,7 +754,7 @@ async def aiotg_video(chat, video):
     uri, length = await upload_tgfile_to_matrix(file_id, user_id, mime)
     info = {'mimetype': mime, 'size': length, 'h': video['height'],
             'w': video['width']}
-    body = 'Video_{}.mp4'.format(int(time() * 1000))
+    body = create_file_name('Video', mime)
 
     if uri:
         j = await send_matrix_message(room_id, user_id, txn_id, body=body,
