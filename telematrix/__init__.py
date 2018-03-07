@@ -838,8 +838,7 @@ def main():
     """
     Main function to get the entire ball rolling.
     """
-    logging.basicConfig(level=logging.DEBUG)  # should be set to WARNING when debug is no
-    # more necessary
+    logging.basicConfig(level=logging.WARNING)
     db.initialize(DATABASE_URL)
 
     loop = asyncio.get_event_loop()
