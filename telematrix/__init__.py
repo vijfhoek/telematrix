@@ -248,11 +248,11 @@ async def matrix_transaction(request):
 
                         # Append the correct extension if it's missing or wrong
                         try:
-                            exts = MT.types_map_inv[content['info']['mimetype']]
+                            exts = MT.types_map_inv[1][content['info']['mimetype']]
+                            if not content['body'].endswith(tuple(exts)):
+                                content['body'] += '.' + exts[0]
                         except KeyError:
-                            exts = ""
-                        if not content['body'].endswith(tuple(exts)):
-                            content['body'] += '.' + exts[0]
+                            pass
 
                         # Download the file
                         await download_matrix_file(url, content['body'])
