@@ -144,28 +144,18 @@ async def shorten_url(url):
 
 
 def matrix_is_telegram(user_id):
+    """
+    Check if the user is a virtual telegram user or a real matrix user. Returns True if it is a fake
+    user (telegram virtual user).
+    :param user_id: The matrix id of the user.
+    :return: True if a virtual telegram user.
+    """
     username = user_id.split(':')[0][1:]
     return username.startswith('telegram_')
 
 
 def get_username(user_id):
     return user_id.split(':')[0][1:]
-
-
-mime_extensions = {
-    'image/jpeg': 'jpg',
-    'image/gif': 'gif',
-    'image/png': 'png',
-    'image/tiff': 'tif',
-    'image/x-tiff': 'tif',
-    'image/bmp': 'bmp',
-    'image/x-windows-bmp': 'bmp',
-    'video/avi': 'avi',
-    'msvideo/avi': 'avi',
-    'x-msvideo/avi': 'avi',
-    'video/mp4': 'mp4',
-    'x-video/mp4': 'mp4',
-}
 
 
 async def matrix_transaction(request):
@@ -242,24 +232,27 @@ async def matrix_transaction(request):
 
                 if content['msgtype'] == 'm.text':
                     msg, mode = format_matrix_msg('{}', content)
-                    response = await group.send_text("<b>{}:</b> {}".format(displayname, msg), parse_mode='HTML')
+                    response = await group.send_text("<b>{}:</b> {}".format(displayname, msg),
+                                                     parse_mode='HTML')
                 elif content['msgtype'] == 'm.notice':
                     msg, mode = format_matrix_msg('{}', content)
-                    response = await group.send_text("[{}] {}".format(displayname, msg), parse_mode=mode)
+                    response = await group.send_text("[{}] {}".format(displayname, msg),
+                                                     parse_mode=mode)
                 elif content['msgtype'] == 'm.emote':
                     msg, mode = format_matrix_msg('{}', content)
-                    response = await group.send_text("* {} {}".format(displayname, msg), parse_mode=mode)
+                    response = await group.send_text("* {} {}".format(displayname, msg),
+                                                     parse_mode=mode)
                 elif content['msgtype'] in ['m.image', 'm.audio', 'm.video', 'm.file']:
                     try:
                         url = urlparse(content['url'])
 
                         # Append the correct extension if it's missing or wrong
                         try:
-                            ext = mime_extensions[content['info']['mimetype']]
+                            exts = MT.types_map_inv[content['info']['mimetype']]
                         except KeyError:
-                            ext = ""
-                        if not content['body'].endswith(ext):
-                            content['body'] += '.' + ext
+                            exts = ""
+                        if not content['body'].endswith(tuple(exts)):
+                            content['body'] += '.' + exts[0]
 
                         # Download the file
                         await download_matrix_file(url, content['body'])
@@ -270,9 +263,9 @@ async def matrix_transaction(request):
                                       .format(url.netloc, quote(url.path))
                             url_str = await shorten_url(url_str)
 
-
                             if content['msgtype'] == 'm.image':
                                 if content['info']['mimetype'] == 'image/gif':
+                                    # Send gif as a video, so telegram can display it animated
                                     caption = '{} sent a gif'.format(displayname)
                                     await group.send_chat_action('upload_video')
                                     response = await group.send_video(file, caption=caption)
@@ -299,7 +292,8 @@ async def matrix_transaction(request):
                     print(json.dumps(content, indent=4))
 
             elif event['type'] == 'm.room.member':
-                if HIDE_MEMBERSHIP_CHANGES:
+                if HIDE_MEMBERSHIP_CHANGES:  # Hide everything, could be improved to be
+                    # more specific
                     continue
                 if matrix_is_telegram(event['state_key']):
                     continue
@@ -465,6 +459,13 @@ async def upload_tgfile_to_matrix(file_id, user_id, mime='image/jpeg', convert_t
 
 
 async def upload_file_to_matrix(file_id, user_id, mime):
+    """
+    Upload to the matrix homeserver all kinds of files based on mime informations.
+    :param file_id: Telegram file id
+    :param user_id: Matrix user id
+    :param mime: mime type of the file
+    :return: Tuple (JSON response, data length) if success, None else
+    """
     file_path = (await TG_BOT.get_file(file_id))['file_path']
     request = await TG_BOT.download_file(file_path)
     data = await request.read()
@@ -580,6 +581,7 @@ async def send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, m
         db.session.add(message)
         db.session.commit()
 
+
 @TG_BOT.handle('sticker')
 async def aiotg_sticker(chat, sticker):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
@@ -673,6 +675,9 @@ async def aiotg_document(chat, document):
     info = {'mimetype': mime, 'size': length}
 
     if uri:
+        # We check if the document can be sent in a better way (for example a photo or a gif)
+        # For gif, that's still not perfect : it's sent as a video to matrix instead of a real
+        # gif image
         if 'image' in mime:
             msgtype = 'm.image'
             body = create_file_name('Image', mime)
@@ -688,6 +693,8 @@ async def aiotg_document(chat, document):
         await send_file_to_matrix(chat, room_id, user_id, txn_id, body, uri, info, msgtype)
 
 
+# This doesn't catch video from telegram, I don't know why
+# The handler is never called
 @TG_BOT.handle('video')
 async def aiotg_video(chat, video):
     link = db.session.query(db.ChatLink).filter_by(tg_room=chat.id).first()
@@ -766,11 +773,11 @@ async def aiotg_message(chat, match):
                                                  re_msg['from']['last_name'])
         else:
             msg_from = '{} (Telegram)'.format(re_msg['from']['first_name'])
-        date = datetime.fromtimestamp(re_msg['date']) \
-               .strftime('%Y-%m-%d %H:%M:%S')
+        date = datetime.fromtimestamp(re_msg['date']).strftime('%Y-%m-%d %H:%M:%S')
 
         reply_mx_id = db.session.query(db.Message)\
-                .filter_by(tg_group_id=chat.message['chat']['id'], tg_message_id=chat.message['reply_to_message']['message_id']).first()
+            .filter_by(tg_group_id=chat.message['chat']['id'],
+                       tg_message_id=chat.message['reply_to_message']['message_id']).first()
 
         html_message = html.escape(message).replace('\n', '<br />')
         if 'text' in re_msg:
@@ -787,7 +794,9 @@ async def aiotg_message(chat, match):
             quoted_msg = 'Reply to {}:\n{}\n\n{}' \
                          .format(reply_mx_id.displayname, quoted_msg, message)
             quoted_html = '<i><a href="https://matrix.to/#/{}/{}">Reply to {}</a>:</i><br />{}<p>{}</p>' \
-                          .format(html.escape(room_id), html.escape(reply_mx_id.matrix_event_id), html.escape(reply_mx_id.displayname),
+                          .format(html.escape(room_id),
+                                  html.escape(reply_mx_id.matrix_event_id),
+                                  html.escape(reply_mx_id.displayname),
                                   quoted_html, html_message)
         else:
             quoted_msg = 'Reply to {}:\n{}\n\n{}' \
@@ -829,9 +838,9 @@ def main():
     """
     Main function to get the entire ball rolling.
     """
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)  # should be set to WARNING when debug is no
+    # more necessary
     db.initialize(DATABASE_URL)
-    print(TG_BOT._handlers)
 
     loop = asyncio.get_event_loop()
     asyncio.ensure_future(TG_BOT.loop())
