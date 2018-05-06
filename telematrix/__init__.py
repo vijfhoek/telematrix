@@ -291,6 +291,37 @@ async def matrix_transaction(request):
                     print('Unsupported message type {}'.format(content['msgtype']))
                     print(json.dumps(content, indent=4))
 
+            elif event['type'] == 'm.sticker':
+                user_id = event['user_id']
+                if matrix_is_telegram(user_id):
+                    continue
+
+                sender = db.session.query(db.MatrixUser) \
+                    .filter_by(matrix_id=user_id).first()
+
+                if not sender:
+                    response = await matrix_get('client', 'profile/{}/displayname'
+                                                .format(user_id), None)
+                    try:
+                        displayname = response['displayname']
+                    except KeyError:
+                        displayname = get_username(user_id)
+                    sender = db.MatrixUser(user_id, displayname)
+                    db.session.add(sender)
+                else:
+                    displayname = sender.name or get_username(user_id)
+                content = event['content']
+
+                try:
+                    url = urlparse(content['url'])
+                    await download_matrix_file(url, content['body'])
+
+                    with open('/tmp/{}'.format(content['body']), 'rb') as file:
+                        response = await group.send_sticker(file)
+
+                except:
+                    pass
+
             elif event['type'] == 'm.room.member':
                 if HIDE_MEMBERSHIP_CHANGES:  # Hide everything, could be improved to be
                     # more specific
