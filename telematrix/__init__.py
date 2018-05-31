@@ -316,8 +316,10 @@ async def matrix_transaction(request):
                     url = urlparse(content['url'])
                     await download_matrix_file(url, content['body'])
 
-                    with open('/tmp/{}'.format(content['body']), 'rb') as file:
-                        response = await group.send_sticker(file)
+                    png_image = Image.open('/tmp/{}'.format(content['body']))
+                    png_image.save('/tmp/{}.webp'.format(content['body']), 'WEBP')
+                    with open('/tmp/{}.webp'.format(content['body']), 'rb') as file:
+                        response = await group.send_document(file)
 
                 except:
                     pass
