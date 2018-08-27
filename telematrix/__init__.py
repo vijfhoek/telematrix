@@ -184,7 +184,7 @@ async def matrix_transaction(request):
             for alias in aliases:
                 print(alias)
                 if alias.split('_')[0] != '#telegram' \
-                        or alias.split(':')[-1] != MATRIX_HOST_BARE:
+                        or not alias.endswith(MATRIX_HOST_BARE):
                     continue
 
                 tg_id = alias.split('_')[1].split(':')[0]
