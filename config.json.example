@@ -15,5 +15,7 @@
     "user_id_format": "@telegram_{}:DOMAIN.TLD",
     "db_url": "sqlite:///database.db",
 
+    "hide_membership_changes": "True",
+
     "as_port": 5000
 }
